@@ -38,4 +38,16 @@ public class NoteController {
         service.delete(id);
         return ResponseEntity.noContent().build();
     }
+    @PutMapping("/{id}")
+    public ResponseEntity<Note> replace(@PathVariable("id") String id, @Valid @RequestBody NoteRequest r){
+        NoteUpdated note = service.replace(id,r.title());
+        boolean created = !note.isUpdated();
+        if(created){
+            URI location = URI.create("/api/notes/" + note.note().id());
+            return ResponseEntity.created(location).body(note.note());
+        }
+        else
+            return ResponseEntity.ok(note.note());
+
+    }
 }

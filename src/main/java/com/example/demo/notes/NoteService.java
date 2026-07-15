@@ -38,4 +38,17 @@ public class NoteService {
         return note;
     }
 
+    public NoteUpdated replace(String id, String newTitle) {
+        boolean[] replaced = {false};
+        Note note = notes.compute(id, (key, current) -> {
+            if(current == null)
+                return new Note(id, newTitle, Instant.now());
+            else {
+                replaced[0] = true;
+                return new Note(id, newTitle, current.createdAt());
+            }
+        });
+        return new NoteUpdated(note, replaced[0]);
+    }
+
 }
