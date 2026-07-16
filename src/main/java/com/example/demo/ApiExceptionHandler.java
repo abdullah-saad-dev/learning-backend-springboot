@@ -1,6 +1,7 @@
 package com.example.demo;
 
-import com.example.demo.notes.NoteNotFoundException;
+import com.example.demo.tasks.DuplicateTaskTitleException;
+import com.example.demo.tasks.TaskNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -8,10 +9,17 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
-    @ExceptionHandler(NoteNotFoundException.class)
-    public ProblemDetail handle(NoteNotFoundException ex) {
+    @ExceptionHandler(TaskNotFoundException.class)
+    public ProblemDetail handle(TaskNotFoundException ex) {
         ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
-        p.setTitle("Note not found");
+        p.setTitle("Task not found");
+        return p;
+    }
+
+    @ExceptionHandler(DuplicateTaskTitleException.class)
+    public ProblemDetail handle(DuplicateTaskTitleException ex) {
+        ProblemDetail p = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        p.setTitle("Duplicate task title");
         return p;
     }
 }
