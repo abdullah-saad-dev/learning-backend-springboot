@@ -1,0 +1,31 @@
+# Build context = repo root. Keep the image build lean and reproducible by
+# excluding everything the Dockerfile does not need. Requires BuildKit, which
+# reads <dockerfile>.dockerignore next to the Dockerfile.
+
+# Build output (the jar is produced inside the build stage)
+target/
+
+# IDE / editor
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.settings/
+.project
+.classpath
+
+# VCS and CI
+.git/
+.gitignore
+.gitattributes
+
+# Docker files themselves
+docker/
+
+# Docs and local notes
+*.md
+notes/
+
+# Claude tooling
+.claude/
