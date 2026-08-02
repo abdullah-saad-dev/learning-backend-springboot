@@ -1,4 +1,4 @@
-package com.example.demo.tasks;
+package com.example.demo.tasks.exceptions;
 
 public class DuplicateTaskTitleException extends RuntimeException {
     public DuplicateTaskTitleException(String title) {

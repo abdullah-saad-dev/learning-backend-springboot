@@ -1,7 +1,7 @@
 package com.example.demo;
 
-import com.example.demo.tasks.DuplicateTaskTitleException;
-import com.example.demo.tasks.TaskNotFoundException;
+import com.example.demo.tasks.exceptions.DuplicateTaskTitleException;
+import com.example.demo.tasks.exceptions.TaskNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
