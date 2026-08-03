@@ -20,7 +20,7 @@ springdoc-openapi · JUnit 5 · Docker
 | Concurrency correctness | `@Version` optimistic locking, enforced at two layers; `ConcurrentHashMap` CAS in the in-memory store |
 | Interface-driven design | One `TaskRepository` interface, a JPA and an in-memory implementation, selected by Spring profile |
 | Integration testing | Testcontainers boots real PostgreSQL and runs the real `schema.sql`; MockMvc covers the HTTP contract |
-| Containerization | Multi-stage `Dockerfile` with cached dependency layers, non-root runtime user, container-aware JVM heap |
+| Containerization | Multi-stage `Dockerfile` — the JDK stays in the build stage, only the jar and a JRE ship. Cached dependency layer, non-root user, container-aware JVM heap |
 | Configuration & secrets | Credentials live outside the repo, imported via `spring.config.import`; nothing secret is committed |
 | API documentation | OpenAPI 3 spec and Swagger UI generated from the code |
 
@@ -28,13 +28,35 @@ springdoc-openapi · JUnit 5 · Docker
 
 ## Running it
 
-### Prerequisites
+### With Docker (nothing else required)
+
+```bash
+docker compose up --build
+```
+
+That builds the app, starts PostgreSQL, creates the schema from `db/schema.sql`, seeds it from
+`db/data.sql`, and waits for the database to be genuinely ready before starting the API. No JDK,
+no local PostgreSQL, no credentials to configure.
+
+<http://localhost:8080/api/tasks> once it is up. `docker compose down` stops it; add `-v` to drop
+the database volume so the next start re-seeds from scratch.
+
+The database is also published on **5433** — not 5432 — so it cannot collide with a PostgreSQL
+already running on the host:
+
+```bash
+psql -h localhost -p 5433 -U task_api -d task_api   # password: task_api
+```
+
+### Running locally instead
+
+#### Prerequisites
 
 - JDK 25
 - PostgreSQL 18 (or Docker)
 - Docker — required to run the test suite
 
-### Database setup
+#### Database setup
 
 ```bash
 createdb task_api
@@ -55,7 +77,7 @@ spring.datasource.password=...
 the app still starts on a machine without it, which is what lets the test suite run on CI with
 no credentials at all.
 
-### Start
+#### Start
 
 ```bash
 ./mvnw spring-boot:run
@@ -84,7 +106,9 @@ To run without a database, use the in-memory store:
 33 tests. Requires a running Docker daemon — the integration tests start their own PostgreSQL
 container and need no local database or credentials.
 
-### Container
+### Building the image on its own
+
+Compose does this for you; this is only for running the image against a database you already have.
 
 ```bash
 docker build -f docker/Dockerfile -t tasks-api .
@@ -94,6 +118,10 @@ docker run --rm -p 8080:8080 \
   -e SPRING_DATASOURCE_PASSWORD=... \
   tasks-api
 ```
+
+The build stage compiles with a JDK; the runtime stage carries only a JRE and the jar, since
+nothing after packaging needs a compiler. That is **168 MB to pull**, against 200 MB if the JDK
+were kept in the final image.
 
 ---
 

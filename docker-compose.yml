@@ -1,0 +1,60 @@
+# Runs the API and its database together. The only prerequisite is Docker:
+#
+#   docker compose up --build
+#
+# Then http://localhost:8080/api/tasks. Stop with Ctrl-C; `docker compose down -v`
+# also drops the database volume so the next start re-seeds from scratch.
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: task_api
+      POSTGRES_USER: task_api
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-task_api}
+    volumes:
+      # Postgres 18+ wants the mount one level up, at /var/lib/postgresql, and puts
+      # the cluster in a major-version subdirectory beneath it. Mounting the old
+      # /var/lib/postgresql/data path makes the image refuse to start.
+      - pgdata:/var/lib/postgresql
+      # Anything in this directory runs once, in filename order, the first time the
+      # data volume is empty. These are the project's real scripts, not copies, so
+      # the container schema cannot drift from the one the app validates against.
+      - ./src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./src/main/resources/db/data.sql:/docker-entrypoint-initdb.d/02-data.sql:ro
+    ports:
+      # Published on 5433 so this never collides with a PostgreSQL already running
+      # on the host's 5432. The app does not use this mapping - it reaches the
+      # database over the compose network - it is here for psql and GUI clients.
+      - "5433:5432"
+    healthcheck:
+      # Addressed over TCP on purpose. While the init scripts run, the image starts
+      # a temporary server that listens only on a unix socket, so a socket-based
+      # check would report ready before the seed data exists.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U task_api -d task_api"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    environment:
+      # "postgres" is the service name above; compose resolves it on the shared
+      # network. ddl-auto=validate means startup fails loudly if the schema the
+      # init scripts created does not match the entity.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/task_api
+      SPRING_DATASOURCE_USERNAME: task_api
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-task_api}
+    depends_on:
+      postgres:
+        # Not just "started": the app validates the schema during startup, so it
+        # has to wait for the seed scripts to finish, not merely for the port to open.
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:

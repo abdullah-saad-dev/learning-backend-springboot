@@ -13,14 +13,21 @@ COPY .mvn/ .mvn/
 COPY mvnw pom.xml ./
 RUN chmod +x mvnw && ./mvnw -B dependency:go-offline
 
-# Copy sources and build the executable jar. Tests are skipped here; run them
-# in CI rather than as part of the image build.
+# Copy sources and build the executable jar. Tests are skipped here; they need a
+# Docker daemon for Testcontainers, so they run in CI rather than in the image build.
 COPY src/ src/
 RUN ./mvnw -B clean package -DskipTests
 
 # ---- Runtime stage --------------------------------------------------------
-# Slim runtime image. Runs as a non-root user for a smaller attack surface.
-FROM eclipse-temurin:25-jdk AS runtime
+# A JRE, not the JDK: this stage only runs `java -jar`, so the compiler and the
+# rest of the development tooling would be dead weight in the shipped image.
+# Runs as a non-root user for a smaller attack surface.
+#
+# Note this is a different base image from the build stage, so a machine that
+# builds pulls both. That costs ~321 MB once on a builder and saves ~100 MB on
+# every pull of the result - worth it when the image is deployed anywhere other
+# than the machine that built it.
+FROM eclipse-temurin:25-jre AS runtime
 
 WORKDIR /app
 
