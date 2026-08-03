@@ -1,7 +1,6 @@
 package com.example.demo.tasks;
 
-import com.example.demo.tasks.exceptions.TaskNotFoundException;
-import com.example.demo.tasks.repository.TaskRepository;
+import com.example.demo.tasks.service.TaskService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -9,79 +8,65 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
-import java.time.Instant;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/tasks")
 public class TaskController {
-    private final TaskRepository tasks;
+    private final TaskService service;
 
-    public TaskController(TaskRepository tasks) {
-        this.tasks = tasks;
+    public TaskController(TaskService service) {
+        this.service = service;
     }
 
+    // Titles are not unique, so searching by one is a filter on the collection rather than a
+    // path segment: /api/tasks/{id} always addresses exactly one task.
     @GetMapping
-    public List<Task> findAll() {
-        return tasks.findAll();
+    public List<TaskResponse> find(@RequestParam(name = "title", required = false) String title) {
+        return TaskResponse.of(title == null ? service.findAll() : service.findByTitle(title));
     }
 
     @GetMapping("/done")
-    public List<Task> findDone() {
-        return tasks.findByDone(true);
+    public List<TaskResponse> findDone() {
+        return TaskResponse.of(service.findByDone(true));
     }
 
     @GetMapping("/pending")
-    public List<Task> findPending() {
-        return tasks.findByDone(false);
+    public List<TaskResponse> findPending() {
+        return TaskResponse.of(service.findByDone(false));
     }
 
-    @GetMapping("/{title}")
-    public List<Task> findByTitle(@PathVariable("title") String title) {
-        return tasks.findByTitle(title);
+    @GetMapping("/{id}")
+    public TaskResponse findById(@PathVariable("id") int id) {
+        return TaskResponse.of(service.findById(id));
     }
 
     @PostMapping
-    public ResponseEntity<Task> create(@Valid @RequestBody TaskRequest r) {
-        // id 0 is a placeholder; save() assigns the real one and hands the task back.
-        Task task = tasks.save(new Task(0, r.title(), r.details(), Instant.now(), r.done() != null && r.done()));
-        return ResponseEntity.created(addLocation(task.title())).body(task);
+    public ResponseEntity<TaskResponse> create(@Valid @RequestBody TaskRequest r) {
+        TaskResponse task = TaskResponse.of(service.create(r.title(), r.details(), r.done()));
+        return ResponseEntity.created(createUri(task.id())).body(task);
     }
 
-    private URI addLocation(String title) {
-        return UriComponentsBuilder.fromPath("/api/tasks/{title}")
-                .buildAndExpand(title)
+    private URI createUri(int id) {
+        return UriComponentsBuilder.fromPath("/api/tasks/{id}")
+                .buildAndExpand(id)
                 .encode()
                 .toUri();
     }
 
-    @PutMapping("/{title}")
-    public ResponseEntity<Task> update(@PathVariable("title") String title, @Valid @RequestBody TaskRequest r) {
-        Task current = first(title);
-        Task updated = new Task(current.id(), r.title(), r.details(), current.createdAt(), r.done() != null && r.done());
-        tasks.update(updated);
-        return ResponseEntity.ok(updated);
+    @PutMapping("/{id}")
+    public ResponseEntity<TaskResponse> update(@PathVariable("id") int id, @Valid @RequestBody TaskRequest r) {
+        return ResponseEntity.ok(TaskResponse.of(service.update(id, r.title(), r.details(), r.done())));
     }
 
-    @PatchMapping("/{title}")
-    public ResponseEntity<Task> setDone(@PathVariable("title") String title, @Valid @RequestBody TaskPatch r) {
-        Task current = first(title);
-        Task updated = new Task(current.id(), current.title(), current.details(), current.createdAt(), r.done());
-        tasks.update(updated);
-        return ResponseEntity.ok(updated);
+    @PatchMapping("/{id}")
+    public ResponseEntity<TaskResponse> setDone(@PathVariable("id") int id, @Valid @RequestBody TaskPatch r) {
+        return ResponseEntity.ok(TaskResponse.of(service.setDone(id, r.done())));
     }
 
-    @DeleteMapping("/{title}")
-    public ResponseEntity<Void> delete(@PathVariable("title") String title) {
-        tasks.delete(first(title));
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable("id") int id) {
+        service.delete(id);
         return ResponseEntity.noContent().build();
-    }
-
-    // Titles are no longer unique, so a title can name several tasks; the single-task
-    // endpoints act on the first match.
-    private Task first(String title) {
-        return tasks.findByTitle(title).stream()
-                .findFirst()
-                .orElseThrow(() -> new TaskNotFoundException(title));
     }
 }
