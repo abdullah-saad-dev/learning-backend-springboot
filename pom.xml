@@ -29,6 +29,7 @@
     <properties>
         <java.version>25</java.version>
         <springdoc.version>3.0.0</springdoc.version>
+        <testcontainers.version>2.0.5</testcontainers.version>
     </properties>
     <dependencies>
         <dependency>
@@ -79,7 +80,42 @@
             <artifactId>lombok</artifactId>
             <scope>provided</scope>
         </dependency>
+
+        <!-- Integration tests run against a real Postgres in Docker rather than an embedded
+             stand-in: the schema under test uses identity columns, timestamptz and an
+             optimistic-locking UPDATE ... WHERE version = ?, none of which an H2 in
+             "PostgreSQL mode" reproduces faithfully enough to be worth trusting. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Spring Boot's parent does not manage Testcontainers versions, so the BOM is
+                 imported to keep the modules in step. Note 2.x renamed the artifacts:
+                 "postgresql" is now "testcontainers-postgresql". -->
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>${testcontainers.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <build>
         <plugins>

@@ -55,18 +55,25 @@ public class TaskController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<TaskResponse> update(@PathVariable("id") int id, @Valid @RequestBody TaskRequest r) {
-        return ResponseEntity.ok(TaskResponse.of(service.update(id, r.title(), r.details(), r.done())));
+    public ResponseEntity<TaskResponse> update(@PathVariable("id") int id,
+                                               @Valid @RequestBody TaskUpdateRequest r) {
+        return ResponseEntity.ok(TaskResponse.of(
+                service.update(id, r.title(), r.details(), r.done(), r.version())));
     }
 
     @PatchMapping("/{id}")
-    public ResponseEntity<TaskResponse> setDone(@PathVariable("id") int id, @Valid @RequestBody TaskPatch r) {
-        return ResponseEntity.ok(TaskResponse.of(service.setDone(id, r.done())));
+    public ResponseEntity<TaskResponse> setDone(@PathVariable("id") int id,
+                                                @Valid @RequestBody TaskPatch r) {
+        return ResponseEntity.ok(TaskResponse.of(service.setDone(id, r.done(), r.version())));
     }
 
+    // DELETE has no body, so the version travels as a required query parameter rather than a
+    // field. If-Match would be the more standard spelling, but this API already names the
+    // concept "version" in every request and response and one name beats two.
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable("id") int id) {
-        service.delete(id);
+    public ResponseEntity<Void> delete(@PathVariable("id") int id,
+                                       @RequestParam("version") long version) {
+        service.delete(id, version);
         return ResponseEntity.noContent().build();
     }
 }
