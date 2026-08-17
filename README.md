@@ -17,8 +17,8 @@ springdoc-openapi · JUnit 5 · Docker
 | REST API design | `TaskController` — resource-per-id routing, `201` + `Location`, `204`, `409` for conflicts, RFC 7807 error bodies |
 | Relational database integration | `db/schema.sql` is the source of truth; `ddl-auto=validate` makes Hibernate check the entity against it at every startup |
 | Transaction management | `@Transactional` on `TaskService`, not the repository — a read and the write that depends on it share one unit of work |
-| Concurrency correctness | `@Version` optimistic locking, enforced at two layers; `ConcurrentHashMap` CAS in the in-memory store |
-| Interface-driven design | One `TaskRepository` interface, a JPA and an in-memory implementation, selected by Spring profile |
+| Concurrency correctness | `@Version` optimistic locking, enforced at two layers — the service checks the client's version, Hibernate re-checks at flush |
+| Query design | One `search` query whose predicates switch themselves off on a null argument, instead of a finder per filter combination |
 | Integration testing | Testcontainers boots real PostgreSQL and runs the real `schema.sql`; MockMvc covers the HTTP contract |
 | Containerization | Multi-stage `Dockerfile` — the JDK stays in the build stage, only the jar and a JRE ship. Cached dependency layer, non-root user, container-aware JVM heap |
 | Configuration & secrets | Credentials live outside the repo, imported via `spring.config.import`; nothing secret is committed |
@@ -91,19 +91,13 @@ no credentials at all.
 | Health | <http://localhost:8080/actuator/health> |
 | Route index | <http://localhost:8080/> |
 
-To run without a database, use the in-memory store:
-
-```bash
-./mvnw spring-boot:run -Dspring-boot.run.profiles=inmemory
-```
-
 ### Tests
 
 ```bash
 ./mvnw test
 ```
 
-33 tests. Requires a running Docker daemon — the integration tests start their own PostgreSQL
+35 tests. Requires a running Docker daemon — the integration tests start their own PostgreSQL
 container and need no local database or credentials.
 
 ### Building the image on its own
@@ -133,14 +127,29 @@ All mutating requests carry the `version` of the task the client last read. See
 | Method | Path | Success | Errors |
 |---|---|---|---|
 | `GET` | `/api/tasks` | 200 — all tasks, newest first | — |
-| `GET` | `/api/tasks?title=x` | 200 — case-insensitive title search | — |
-| `GET` | `/api/tasks/done` | 200 — completed only | — |
-| `GET` | `/api/tasks/pending` | 200 — outstanding only | — |
+| `GET` | `/api/tasks?title=x&done=b` | 200 — filtered, either parameter optional | 400 |
 | `GET` | `/api/tasks/{id}` | 200 — one task | 404 |
 | `POST` | `/api/tasks` | 201 + `Location` | 400 |
 | `PUT` | `/api/tasks/{id}` | 200 — full replacement | 400 · 404 · 409 |
-| `PATCH` | `/api/tasks/{id}` | 200 — sets `done` only | 400 · 404 · 409 |
+| `PATCH` | `/api/tasks/{id}/done` | 200 — sets `done` only | 400 · 404 · 409 |
 | `DELETE` | `/api/tasks/{id}?version=n` | 204 | 400 · 404 · 409 |
+
+### Filtering the list
+
+`title` and `done` are independent optional filters on the one list endpoint, and they compose:
+
+| Request | Returns |
+|---|---|
+| `/api/tasks` | everything |
+| `/api/tasks?done=true` | completed only |
+| `/api/tasks?done=false` | outstanding only |
+| `/api/tasks?title=buy%20milk` | case-insensitive exact title match |
+| `/api/tasks?title=buy%20milk&done=false` | both, narrowed |
+
+`done` is a boxed `Boolean` on the controller, so an omitted parameter is `null` — "no filter" —
+rather than collapsing into `false`. That distinction is what replaced the earlier `/done` and
+`/pending` routes: two paths that could never be combined with `title`, and that would have
+needed a third and a fourth as filters were added.
 
 ### Representation
 
@@ -161,18 +170,24 @@ published because a client cannot edit safely without it.
 ### Requests
 
 ```jsonc
-// POST — no version, the task does not exist yet
+// POST /api/tasks — no version, the task does not exist yet
 { "title": "buy milk", "details": "2%", "done": false }
 
-// PUT — full replacement, every field required
+// PUT /api/tasks/{id} — full replacement; title, done and version required, details optional
 { "title": "buy milk", "details": "2%", "done": true, "version": 0 }
 
-// PATCH — moves done only, the rest is carried over
+// PATCH /api/tasks/{id}/done — moves done only, the rest is carried over
 { "done": true, "version": 0 }
 ```
 
 `done` is a boxed `Boolean` with `@NotNull` rather than a primitive: a primitive would silently
 default an omitted field to `false` and quietly mark the task pending instead of returning 400.
+`details` is optional on both writes, matching its nullable column.
+
+`PATCH` is scoped to a sub-resource, `/{id}/done`, rather than accepting an arbitrary partial
+task. A general partial update has to distinguish *absent* from *explicitly null* — three states
+in JSON, two in a Java field — which needs `JsonNullable` or a hand-written wrapper. The one
+field that actually changes on its own got its own endpoint instead.
 
 ### Errors
 
@@ -231,27 +246,41 @@ repository opens nothing itself. That is what lets a read and the write dependin
 roll back together. `spring.jpa.open-in-view` is explicitly disabled: left on, entities handed to
 the web layer stay managed and a stray setter would flush to the database.
 
-### Two stores behind one interface
+### One query instead of a finder per filter
 
-`TaskRepository` has a JPA implementation and an in-memory one, chosen by profile rather than
-`@Primary`, so exactly one bean exists per environment instead of two and a tiebreak. The
-interface documents the contract both must honour — notably that lookups **throw** when a row is
-absent rather than returning `null`, a divergence that previously turned every 404 into a 500.
+`TaskRepository` is a Spring Data `JpaRepository`, so `save`, `findById` and `delete` come for
+free and are not re-implemented. The one hand-written query is `search`, and it carries a
+deliberate shape:
 
-The in-memory store is genuinely concurrent, not a toy: every stored instance is defensively
-copied so callers cannot reach into the map, and version checks use `computeIfPresent`, which is
-atomic per key — the equivalent of `UPDATE ... WHERE version = ?`.
+```sql
+where (:title is null or upper(t.title) = upper(:title))
+  and (:done  is null or t.done = :done)
+order by t.createdAt desc
+```
+
+Each predicate neutralises itself when its argument is null — the `is null` branch makes the
+whole disjunction true and the filter never applies. Two optional filters would otherwise mean
+four query methods, three would mean eight; here they mean one query and one method. Spring
+Data's `Specification` API solves the same problem with a builder DSL, which is more machinery
+than two filters justify.
+
+The explicit `order by` matters: derived queries return rows in whatever order the database
+chooses, which happens to look like insertion order until it doesn't.
 
 ### Input types are separate from the entity
 
-`TaskRequest`, `TaskUpdateRequest` and `TaskPatch` are distinct from `TaskEntity`. A
+`CreateTaskRequest`, `UpdateTaskRequest` and `SetDoneRequest` are distinct from `Task`. A
 client-supplied `id` or `createdAt` structurally cannot reach the store, because the field does
 not exist on the input type. `TaskResponse` is likewise separate, so a schema change cannot
 silently alter the JSON contract.
 
-`TaskEntity` deliberately avoids Lombok's `@Data`: it would derive `equals`/`hashCode` from every
+`Task` deliberately avoids Lombok's `@Data`: it would derive `equals`/`hashCode` from every
 mutable field, so a task's hash would change the moment Hibernate assigned its id on persist,
-losing it from any `HashSet` holding it. Identity is the id and nothing else.
+losing it from any `HashSet` holding it. The entity keeps reference identity instead, which is
+the safe default for a mutable JPA entity.
+
+Edits are expressed as `toBuilder()` copies rather than setters, so a task is never half-updated
+between two assignments.
 
 ---
 
@@ -259,9 +288,8 @@ losing it from any `HashSet` holding it. Identity is the id and nothing else.
 
 | Suite | Tests | Scope |
 |---|---|---|
-| `TaskApiTest` | 19 | HTTP contract via MockMvc — status codes, media types, the version handshake |
-| `JpaTaskRepositoryTest` | 10 | The store, driven through real committed transactions |
-| `InMemoryTaskRepositoryConcurrencyTest` | 3 | Races run over thousands of rounds |
+| `TaskApiTest` | 23 | HTTP contract via MockMvc — status codes, media types, the version handshake |
+| `TaskRepositoryTest` | 11 | The store, driven through real committed transactions |
 | `Demo1ApplicationTests` | 1 | Context loads |
 
 Integration tests run against **real PostgreSQL in Docker** via Testcontainers, seeded with the
@@ -270,14 +298,18 @@ script forgets therefore fails the build instead of a deployment. An embedded da
 "PostgreSQL mode" would not reproduce identity columns, `timestamptz` or the optimistic-locking
 `UPDATE` faithfully enough to be worth trusting.
 
-Two tests are worth singling out. `aCommitInsideTheTransactionWindowIsCaughtAtFlush` uses
+Three tests are worth singling out. `aCommitInsideTheTransactionWindowIsCaughtAtFlush` uses
 `PROPAGATION_REQUIRES_NEW` to commit a competing write in the middle of another transaction —
 the only way to exercise Hibernate's own version check. `malformedJsonIsA400NotA500` guards the
-exception-handler ordering described above.
+exception-handler ordering described above. `anUnparseableDoneParameterIsA400NotA500` does the
+same for an unbindable query parameter.
 
-The suite was validated by reintroducing a previously shipped bug (a repository lookup returning
-`null` instead of throwing) and confirming it went red — six failures across both new suites —
-before reverting. A test that has never failed proves nothing.
+`search` is covered one filter combination per test — neither filter, title only, `done` only,
+both — so a predicate that stopped neutralising itself fails exactly one test and names which.
+That paid for itself immediately: `searchWithoutFiltersReturnsEverythingNewestFirst` caught a
+binding failure on a null `title` that the HTTP-level tests missed, because at that layer whether
+it surfaces depends on execution order. A bug reproduced only sometimes is worth pinning at the
+layer where it reproduces every time.
 
 ---
 
@@ -295,6 +327,10 @@ before reverting. A test that has never failed proves nothing.
 
 ## Known limitations
 
+- **`search` fails on a null `title`.** PostgreSQL cannot infer a type for a null parameter used
+  as a function argument, so `upper(:title)` binds as `bytea` and the query errors. The fix is to
+  cast the parameter in the JPQL — `cast(:title as String)`, at both occurrences; casting only
+  the `is null` side leaves the other untyped. Three repository tests are red on this.
 - **No authentication or authorization.** Every caller can do everything. This is the largest gap
   and the obvious next step.
 - **No CI pipeline yet.** The test suite is written to run in one — `./mvnw test` needs only a

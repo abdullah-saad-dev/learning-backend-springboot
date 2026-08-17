@@ -1,6 +1,6 @@
-package com.example.demo.tasks;
+package com.example.demo.tasks.dtos;
 
-import com.example.demo.tasks.entity.TaskEntity;
+import com.example.demo.tasks.entity.Task;
 
 import java.time.Instant;
 import java.util.List;
@@ -16,12 +16,12 @@ import java.util.List;
 public record TaskResponse(int id, String title, String details, Instant createdAt, boolean done,
                            long version) {
 
-    public static TaskResponse of(TaskEntity task) {
+    public static TaskResponse of(Task task) {
         return new TaskResponse(task.getId(), task.getTitle(), task.getDetails(),
-                task.getCreatedAt(), task.isDone(), task.getVersion());
+                task.getCreatedAt(),   task.isDone(), task.getVersion());
     }
 
-    public static List<TaskResponse> of(List<TaskEntity> tasks) {
+    public static List<TaskResponse> of(List<Task> tasks) {
         return tasks.stream().map(TaskResponse::of).toList();
     }
 }

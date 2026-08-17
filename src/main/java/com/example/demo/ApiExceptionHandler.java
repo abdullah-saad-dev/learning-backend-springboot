@@ -51,8 +51,6 @@ public class ApiExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public ProblemDetail handle(Exception ex) {
-        // Logged in full here because the response deliberately says nothing: ex.getMessage()
-        // is the field that leaks internals to clients, and a silent 500 is undiagnosable.
         log.error("Unhandled exception serving request", ex);
         return problem(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error",
                 "The request could not be completed.");

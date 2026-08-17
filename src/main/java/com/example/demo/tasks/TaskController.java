@@ -1,5 +1,10 @@
 package com.example.demo.tasks;
 
+import com.example.demo.tasks.dtos.CreateTaskRequest;
+import com.example.demo.tasks.dtos.SetDoneRequest;
+import com.example.demo.tasks.dtos.TaskResponse;
+import com.example.demo.tasks.dtos.UpdateTaskRequest;
+import com.example.demo.tasks.entity.Task;
 import com.example.demo.tasks.service.TaskService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -19,21 +24,10 @@ public class TaskController {
         this.service = service;
     }
 
-    // Titles are not unique, so searching by one is a filter on the collection rather than a
-    // path segment: /api/tasks/{id} always addresses exactly one task.
     @GetMapping
-    public List<TaskResponse> find(@RequestParam(name = "title", required = false) String title) {
-        return TaskResponse.of(title == null ? service.findAll() : service.findByTitle(title));
-    }
-
-    @GetMapping("/done")
-    public List<TaskResponse> findDone() {
-        return TaskResponse.of(service.findByDone(true));
-    }
-
-    @GetMapping("/pending")
-    public List<TaskResponse> findPending() {
-        return TaskResponse.of(service.findByDone(false));
+    public List<TaskResponse> findAll(@RequestParam(name = "title", required = false) String title,
+                                      @RequestParam(name = "done", required = false) Boolean done) {
+        return TaskResponse.of(service.search(title, done));
     }
 
     @GetMapping("/{id}")
@@ -42,7 +36,7 @@ public class TaskController {
     }
 
     @PostMapping
-    public ResponseEntity<TaskResponse> create(@Valid @RequestBody TaskRequest r) {
+    public ResponseEntity<TaskResponse> create(@Valid @RequestBody CreateTaskRequest r) {
         TaskResponse task = TaskResponse.of(service.create(r.title(), r.details(), r.done()));
         return ResponseEntity.created(createUri(task.id())).body(task);
     }
@@ -54,26 +48,27 @@ public class TaskController {
                 .toUri();
     }
 
-    @PutMapping("/{id}")
-    public ResponseEntity<TaskResponse> update(@PathVariable("id") int id,
-                                               @Valid @RequestBody TaskUpdateRequest r) {
-        return ResponseEntity.ok(TaskResponse.of(
-                service.update(id, r.title(), r.details(), r.done(), r.version())));
-    }
-
-    @PatchMapping("/{id}")
+    @PatchMapping("/{id}/done")
     public ResponseEntity<TaskResponse> setDone(@PathVariable("id") int id,
-                                                @Valid @RequestBody TaskPatch r) {
-        return ResponseEntity.ok(TaskResponse.of(service.setDone(id, r.done(), r.version())));
+                                                @Valid @RequestBody SetDoneRequest r) {
+
+        Task patchedTask = service.setDone(id, r.done(), r.version());
+        TaskResponse taskResponse = TaskResponse.of(patchedTask);
+        return ResponseEntity.ok(taskResponse);
     }
 
-    // DELETE has no body, so the version travels as a required query parameter rather than a
-    // field. If-Match would be the more standard spelling, but this API already names the
-    // concept "version" in every request and response and one name beats two.
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable("id") int id,
                                        @RequestParam("version") long version) {
         service.delete(id, version);
         return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping({"/{id}"})
+    public ResponseEntity<TaskResponse> updateTask(@PathVariable("id") int id,
+                                                   @Valid @RequestBody UpdateTaskRequest r) {
+        Task updatedRequest = service.update(id, r);
+        TaskResponse taskResponse = TaskResponse.of(updatedRequest);
+        return ResponseEntity.ok(taskResponse);
     }
 }

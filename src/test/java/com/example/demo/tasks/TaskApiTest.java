@@ -116,19 +116,24 @@ class TaskApiTest {
                 .andExpect(jsonPath("$[2].title").value("first"));
     }
 
+    // "done" is boxed so it has three states, not two: absent means no filter at all, which is
+    // what replaced the old /done and /pending routes.
     @Test
-    void doneAndPendingFilterTheList() throws Exception {
+    void theDoneParameterFiltersTheListAndOmittingItDoesNot() throws Exception {
         create("finished", true);
         create("outstanding", false);
 
-        mvc.perform(get("/api/tasks/done"))
+        mvc.perform(get("/api/tasks").param("done", "true"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].title").value("finished"));
-        mvc.perform(get("/api/tasks/pending"))
+        mvc.perform(get("/api/tasks").param("done", "false"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].title").value("outstanding"));
+        mvc.perform(get("/api/tasks"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2));
     }
 
     @Test
@@ -140,17 +145,97 @@ class TaskApiTest {
                 .andExpect(jsonPath("$.length()").value(1));
     }
 
-    // ---------- update ----------
+    @Test
+    void titleAndDoneNarrowTheListTogether() throws Exception {
+        int milk = create("buy milk", false);
+        create("buy bread", false);
+        markDone(milk, 0);
 
+        mvc.perform(get("/api/tasks").param("title", "buy milk").param("done", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+        mvc.perform(get("/api/tasks").param("title", "buy milk").param("done", "false"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    // A query parameter Spring cannot bind must reach its own 400, not fall through to the
+    // catch-all handler and surface as a 500.
+    @Test
+    void anUnparseableDoneParameterIsA400NotA500() throws Exception {
+        mvc.perform(get("/api/tasks").param("done", "maybe"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+    }
+
+    // ---------- set done ----------
+
+    @Test
+    void patchMovesOnlyDone() throws Exception {
+        int id = create("unchanged title", false);
+
+        mvc.perform(patch("/api/tasks/{id}/done", id).contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"done":true,"version":0}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("unchanged title"))
+                .andExpect(jsonPath("$.details").value("details"))
+                .andExpect(jsonPath("$.done").value(true))
+                .andExpect(jsonPath("$.version").value(1));
+    }
+
+    @Test
+    void patchAtAStaleVersionIsRejectedAsAConflict() throws Exception {
+        int id = create("contended", false);
+        markDone(id, 0);
+
+        // Second writer still holds version 0. Without the check this would silently
+        // overwrite the first write.
+        mvc.perform(patch("/api/tasks/{id}/done", id).contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"done":false,"version":0}"""))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Conflicting change"));
+
+        mvc.perform(get("/api/tasks/{id}", id))
+                .andExpect(jsonPath("$.done").value(true));
+    }
+
+    @Test
+    void patchWithoutAVersionIsRejected() throws Exception {
+        int id = create("needs a version", false);
+
+        mvc.perform(patch("/api/tasks/{id}/done", id).contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"done":true}"""))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void patchToAMissingTaskIs404NotAConflict() throws Exception {
+        mvc.perform(patch("/api/tasks/{id}/done", 999).contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"done":true,"version":0}"""))
+                .andExpect(status().isNotFound());
+    }
+
+    // ---------- full replace ----------
+
+    // PUT carries the whole task in the body, version included - same spelling as PATCH.
+    // DELETE has no body, so it takes the version as a query parameter instead.
     @Test
     void putAtTheCurrentVersionSucceedsAndAdvancesIt() throws Exception {
         int id = create("before", false);
 
-        mvc.perform(put("/api/tasks/{id}", id).contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(put("/api/tasks/{id}", id)
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"title":"after","details":"d","done":true,"version":0}"""))
+                                {"id":%d,"title":"after","details":"edited","done":true,"version":0}"""
+                                .formatted(id)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("after"))
+                .andExpect(jsonPath("$.details").value("edited"))
                 .andExpect(jsonPath("$.done").value(true))
                 .andExpect(jsonPath("$.version").value(1));
     }
@@ -158,19 +243,18 @@ class TaskApiTest {
     @Test
     void putAtAStaleVersionIsRejectedAsAConflict() throws Exception {
         int id = create("contended", false);
-        editTitle(id, 0, "first writer wins");
+        markDone(id, 0);
 
-        // Second writer still holds version 0. Without the check this would silently
-        // overwrite the first edit.
-        mvc.perform(put("/api/tasks/{id}", id).contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(put("/api/tasks/{id}", id)
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"title":"lost update","details":"d","done":false,"version":0}"""))
+                                {"id":%d,"title":"lost update","details":"d","done":false,"version":0}"""
+                                .formatted(id)))
                 .andExpect(status().isConflict())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.title").value("Conflicting change"));
 
         mvc.perform(get("/api/tasks/{id}", id))
-                .andExpect(jsonPath("$.title").value("first writer wins"));
+                .andExpect(jsonPath("$.title").value("contended"));
     }
 
     @Test
@@ -179,40 +263,17 @@ class TaskApiTest {
 
         mvc.perform(put("/api/tasks/{id}", id).contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"title":"x","details":"d","done":true}"""))
+                                {"id":%d,"title":"x","details":"d","done":true}""".formatted(id)))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
     void putToAMissingTaskIs404NotAConflict() throws Exception {
-        mvc.perform(put("/api/tasks/{id}", 999).contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(put("/api/tasks/{id}", 999)
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"title":"x","details":"d","done":true,"version":0}"""))
+                                {"id":999,"title":"x","details":"d","done":true,"version":0}"""))
                 .andExpect(status().isNotFound());
-    }
-
-    @Test
-    void patchMovesOnlyDone() throws Exception {
-        int id = create("unchanged title", false);
-
-        mvc.perform(patch("/api/tasks/{id}", id).contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"done":true,"version":0}"""))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.title").value("unchanged title"))
-                .andExpect(jsonPath("$.done").value(true))
-                .andExpect(jsonPath("$.version").value(1));
-    }
-
-    @Test
-    void patchAtAStaleVersionIsRejectedAsAConflict() throws Exception {
-        int id = create("contended", false);
-        editTitle(id, 0, "moved on");
-
-        mvc.perform(patch("/api/tasks/{id}", id).contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"done":true,"version":0}"""))
-                .andExpect(status().isConflict());
     }
 
     // ---------- delete ----------
@@ -230,7 +291,7 @@ class TaskApiTest {
     @Test
     void deleteAtAStaleVersionIsRejectedAsAConflict() throws Exception {
         int id = create("contended", false);
-        editTitle(id, 0, "edited after you read it");
+        markDone(id, 0);
 
         mvc.perform(delete("/api/tasks/{id}", id).param("version", "0"))
                 .andExpect(status().isConflict());
@@ -266,12 +327,12 @@ class TaskApiTest {
         return JsonPath.read(result.getResponse().getContentAsString(), "$.id");
     }
 
-    // Not named put(): a member method would shadow the statically imported request builder.
-    private void editTitle(int id, long version, String title) throws Exception {
-        mvc.perform(put("/api/tasks/{id}", id).contentType(MediaType.APPLICATION_JSON)
+    // Stands in for "somebody else got here first": the only write available, used purely to
+    // advance the version out from under the caller in the stale-version tests.
+    private void markDone(int id, long version) throws Exception {
+        mvc.perform(patch("/api/tasks/{id}/done", id).contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"title":"%s","details":"details","done":true,"version":%d}"""
-                                .formatted(title, version)))
+                                {"done":true,"version":%d}""".formatted(version)))
                 .andExpect(status().isOk());
     }
 }
