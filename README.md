@@ -253,8 +253,8 @@ free and are not re-implemented. The one hand-written query is `search`, and it 
 deliberate shape:
 
 ```sql
-where (:title is null or upper(t.title) = upper(:title))
-  and (:done  is null or t.done = :done)
+where (cast(:title as String) is null or upper(t.title) = upper(cast(:title as String)))
+  and (:done is null or t.done = :done)
 order by t.createdAt desc
 ```
 
@@ -263,6 +263,16 @@ whole disjunction true and the filter never applies. Two optional filters would 
 four query methods, three would mean eight; here they mean one query and one method. Spring
 Data's `Specification` API solves the same problem with a builder DSL, which is more machinery
 than two filters justify.
+
+**The casts are load-bearing; do not remove them.** PostgreSQL plans the whole statement before
+evaluating any of it, so it must resolve `upper()` to a concrete overload even on the branch that
+a null `title` never reaches. With an untyped null parameter it resolves to `upper(bytea)`, which
+does not exist, and the query fails outright. The cast gives the placeholder a declared type at
+that position. Both occurrences need it — they are two separate placeholders in the generated
+SQL, and typing only one leaves the other to fail the same way. `:done` needs no cast because
+`t.done = :done` compares against a column whose type PostgreSQL already knows, so there is no
+overload to resolve. Binding the null with its Java type does not help; the type has to be in the
+query text.
 
 The explicit `order by` matters: derived queries return rows in whatever order the database
 chooses, which happens to look like insertion order until it doesn't.
@@ -327,10 +337,6 @@ layer where it reproduces every time.
 
 ## Known limitations
 
-- **`search` fails on a null `title`.** PostgreSQL cannot infer a type for a null parameter used
-  as a function argument, so `upper(:title)` binds as `bytea` and the query errors. The fix is to
-  cast the parameter in the JPQL — `cast(:title as String)`, at both occurrences; casting only
-  the `is null` side leaves the other untyped. Three repository tests are red on this.
 - **No authentication or authorization.** Every caller can do everything. This is the largest gap
   and the obvious next step.
 - **No CI pipeline yet.** The test suite is written to run in one — `./mvnw test` needs only a
