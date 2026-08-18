@@ -15,11 +15,11 @@ springdoc-openapi · JUnit 5 · Docker
 | Area | Where to look |
 |---|---|
 | REST API design | `TaskController` — resource-per-id routing, `201` + `Location`, `204`, `409` for conflicts, RFC 7807 error bodies |
-| Relational database integration | `db/schema.sql` is the source of truth; `ddl-auto=validate` makes Hibernate check the entity against it at every startup |
+| Relational database integration | `db/V1__create_tasks_table.sql` is the source of truth; `ddl-auto=validate` makes Hibernate check the entity against it at every startup |
 | Transaction management | `@Transactional` on `TaskService`, not the repository — a read and the write that depends on it share one unit of work |
 | Concurrency correctness | `@Version` optimistic locking, enforced at two layers — the service checks the client's version, Hibernate re-checks at flush |
 | Query design | One `search` query whose predicates switch themselves off on a null argument, instead of a finder per filter combination |
-| Integration testing | Testcontainers boots real PostgreSQL and runs the real `schema.sql`; MockMvc covers the HTTP contract |
+| Integration testing | Testcontainers boots real PostgreSQL and runs the real `V1__create_tasks_table.sql`; MockMvc covers the HTTP contract |
 | Containerization | Multi-stage `Dockerfile` — the JDK stays in the build stage, only the jar and a JRE ship. Cached dependency layer, non-root user, container-aware JVM heap |
 | Configuration & secrets | Credentials live outside the repo, imported via `spring.config.import`; nothing secret is committed |
 | API documentation | OpenAPI 3 spec and Swagger UI generated from the code |
@@ -34,8 +34,8 @@ springdoc-openapi · JUnit 5 · Docker
 docker compose up --build
 ```
 
-That builds the app, starts PostgreSQL, creates the schema from `db/schema.sql`, seeds it from
-`db/data.sql`, and waits for the database to be genuinely ready before starting the API. No JDK,
+That builds the app, starts PostgreSQL, creates the schema from `db/V1__create_tasks_table.sql`, seeds it from
+`db/R__seed.sql`, and waits for the database to be genuinely ready before starting the API. No JDK,
 no local PostgreSQL, no credentials to configure.
 
 <http://localhost:8080/api/tasks> once it is up. `docker compose down` stops it; add `-v` to drop
@@ -60,8 +60,8 @@ psql -h localhost -p 5433 -U task_api -d task_api   # password: task_api
 
 ```bash
 createdb task_api
-psql -d task_api -f src/main/resources/db/schema.sql
-psql -d task_api -f src/main/resources/db/data.sql   # optional seed data
+psql -d task_api -f src/main/resources/db/V1__create_tasks_table.sql
+psql -d task_api -f src/main/resources/db/R__seed.sql   # optional seed data
 ```
 
 Copy `example.env` to `secrets.env` and fill in the connection details:
@@ -217,7 +217,7 @@ errors it already renders — otherwise every malformed-JSON 400 would become a 
 
 `spring.jpa.hibernate.ddl-auto=validate`. Hibernate never creates or alters a table; it compares
 the entity against the schema at startup and refuses to boot on a mismatch. The schema lives in
-`src/main/resources/db/schema.sql` as reviewable SQL, wrapped in a transaction so a failed run
+`src/main/resources/db/V1__create_tasks_table.sql` as reviewable SQL, wrapped in a transaction so a failed run
 leaves the database untouched rather than half-migrated — PostgreSQL supports transactional DDL,
 which most databases do not.
 
@@ -303,7 +303,7 @@ between two assignments.
 | `Demo1ApplicationTests` | 1 | Context loads |
 
 Integration tests run against **real PostgreSQL in Docker** via Testcontainers, seeded with the
-project's own `schema.sql` rather than a test-only copy. A column the entity expects and the
+project's own `V1__create_tasks_table.sql` rather than a test-only copy. A column the entity expects and the
 script forgets therefore fails the build instead of a deployment. An embedded database in
 "PostgreSQL mode" would not reproduce identity columns, `timestamptz` or the optimistic-locking
 `UPDATE` faithfully enough to be worth trusting.
