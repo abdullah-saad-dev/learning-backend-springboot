@@ -108,6 +108,14 @@
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
+        <!-- Boot 4 moved each technology's auto-configuration out of spring-boot-autoconfigure
+             and into its own module. flyway-core alone puts Flyway on the classpath but leaves
+             nothing to run it, so migrations are silently skipped and ddl-auto=validate then
+             fails on the empty schema. This module is what actually wires Flyway to the datasource. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-flyway</artifactId>
+        </dependency>
     </dependencies>
 
     <dependencyManagement>
