@@ -7,7 +7,7 @@ create collation case_insensitive(
 
 create table users (
     id    uuid default uuidv7() primary key,
-    name  varchar(30) not null,
+    username  varchar(30) not null,
     email varchar(255) not null collate case_insensitive,
     password_hash varchar(255) not null,
     role varchar(255) not null default 'USER',
