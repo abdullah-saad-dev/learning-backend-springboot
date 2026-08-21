@@ -31,9 +31,13 @@ public class UserDetailsImpl implements UserDetails {
         return user.getPassword();
     }
 
+    // Without this the interface default returns true and the enabled column is inert, so a
+    // deactivated account still authenticates. The column is NOT NULL, meaning null only reaches
+    // here on an entity that was never persisted; comparing this way rather than unboxing treats
+    // such a user as disabled instead of throwing inside the authentication chain.
     @Override
     public boolean isEnabled() {
-        return true;
+        return Boolean.TRUE.equals(user.getEnabled());
     }
 
 }
