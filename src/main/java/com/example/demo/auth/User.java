@@ -1,5 +1,6 @@
 package com.example.demo.auth;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.DynamicInsert;
@@ -30,8 +31,8 @@ public class User {
     private String email;
 
     @Column(name = "password_hash")
-    @Getter(AccessLevel.PACKAGE)
     @ToString.Exclude
+    @JsonIgnore
     private String password;
 
     @Column(name = "enabled")

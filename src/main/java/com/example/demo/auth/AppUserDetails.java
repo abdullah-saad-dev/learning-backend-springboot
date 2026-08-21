@@ -1,4 +1,5 @@
 package com.example.demo.auth;
+import lombok.Getter;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -6,11 +7,12 @@ import org.springframework.security.core.userdetails.UserDetails;
 import java.util.Collection;
 import java.util.Collections;
 
-public class UserDetailsImpl implements UserDetails {
+@Getter
+public class AppUserDetails implements UserDetails {
 
     private final User user;
 
-    public UserDetailsImpl(User user) {
+    public AppUserDetails(User user) {
         this.user = user;
     }
 

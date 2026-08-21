@@ -10,11 +10,11 @@ import org.springframework.stereotype.Component;
 import java.util.HashMap;
 import java.util.Map;
 @Component
-public class PasswordEncoderImpl implements PasswordEncoder {
+public class AppPasswordEncoder implements PasswordEncoder {
     private final PasswordEncoder delegate;
     private final String defaultEncoder;
 
-    public PasswordEncoderImpl() {
+    public AppPasswordEncoder() {
         Map<String, PasswordEncoder> encoders = new HashMap<>();
         encoders.put("bcrypt", new BCryptPasswordEncoder(12));
         encoders.put("argon2", Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8());
@@ -34,6 +34,6 @@ public class PasswordEncoderImpl implements PasswordEncoder {
 
     @Override
     public boolean upgradeEncoding(@Nullable String encodedPassword) {
-        return ("{" + defaultEncoder + "}").equals(encodedPassword.substring(0, 1 + defaultEncoder.length()));
+        return delegate.upgradeEncoding(encodedPassword);
     }
 }

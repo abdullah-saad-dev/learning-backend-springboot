@@ -9,8 +9,12 @@ import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import javax.naming.AuthenticationException;
 
 /**
  * Lowest precedence on purpose: Spring's own ProblemDetails advice must get first refusal on
@@ -42,6 +46,11 @@ public class ApiExceptionHandler {
     public ProblemDetail handle(ObjectOptimisticLockingFailureException ex) {
         return problem(HttpStatus.CONFLICT, "Conflicting change",
                 "The task changed while this request was in flight. Re-read it and retry.");
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ProblemDetail handleBadCredentialsAndDisabledExceptions(AuthenticationException ex){
+        return problem(HttpStatus.UNAUTHORIZED, "Unauthorized", "Bad credentials, please try again later");
     }
 
     /**
