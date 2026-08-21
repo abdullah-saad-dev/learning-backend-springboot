@@ -5,6 +5,7 @@ import com.example.demo.auth.dto.LoginResponse;
 import com.example.demo.auth.UserRepository;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -23,7 +24,8 @@ public class AuthService {
     public LoginResponse login(String email, String password){
         UsernamePasswordAuthenticationToken authenticationToken =
                 new UsernamePasswordAuthenticationToken(email, password);
-        AppUserDetails userDetails = (AppUserDetails) authenticationManager.authenticate(authenticationToken);
+        Authentication authentication = authenticationManager.authenticate(authenticationToken);
+        AppUserDetails userDetails = (AppUserDetails) authentication.getPrincipal();
         String token = jwtService.generateToken(userDetails.getUser());
         return new LoginResponse(token, jwtService.getIssuedAt(token), jwtService.getExpirationTime(token));
     }

@@ -1,5 +1,6 @@
 package com.example.demo.tasks;
 
+import com.example.demo.MockMvcSecurity;
 import com.example.demo.PostgresTestContainer;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,6 +12,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MvcResult;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -29,7 +31,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import(PostgresTestContainer.class)
+@Import({PostgresTestContainer.class, MockMvcSecurity.class})
+// Every endpoint below is behind .authenticated(), but none of these tests is about
+// authentication: they cover status codes, media types and the version handshake. @WithMockUser
+// populates the SecurityContext directly, so the filter chain is satisfied without a login round
+// trip, a user row, or any coupling to how credentials happen to be verified this month. The real
+// authentication path is covered by AuthApiTest, where a failure means something different.
+@WithMockUser
 class TaskApiTest {
 
     @Autowired

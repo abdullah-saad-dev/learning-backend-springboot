@@ -9,12 +9,9 @@ import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
-import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-
-import javax.naming.AuthenticationException;
 
 /**
  * Lowest precedence on purpose: Spring's own ProblemDetails advice must get first refusal on
@@ -49,7 +46,7 @@ public class ApiExceptionHandler {
     }
 
     @ExceptionHandler(AuthenticationException.class)
-    public ProblemDetail handleBadCredentialsAndDisabledExceptions(AuthenticationException ex){
+    public ProblemDetail handleAuthenticationException(AuthenticationException ex){
         return problem(HttpStatus.UNAUTHORIZED, "Unauthorized", "Bad credentials, please try again later");
     }
 
