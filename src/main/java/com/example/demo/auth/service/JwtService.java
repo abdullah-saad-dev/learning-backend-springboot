@@ -1,7 +1,8 @@
 package com.example.demo.auth.service;
 
-import com.example.demo.auth.Role;
-import com.example.demo.auth.User;
+import com.example.demo.auth.dto.JwtDetails;
+import com.example.demo.auth.enums.Role;
+import com.example.demo.auth.entity.User;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
@@ -35,14 +36,22 @@ public class JwtService {
                 .build();
         return this.jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
     }
-    public Instant getExpirationTime(){
+
+    private Instant getExpirationTime() {
         return Instant.now().plus(15, ChronoUnit.MINUTES);
     }
-    public Instant getExpirationTime(String token){
+
+    private Instant getExpirationTime(String token) {
         return jwtDecoder.decode(token).getExpiresAt();
     }
-    public Instant getIssuedAt(String token){
+
+    public Instant getIssuedAt(String token) {
         return jwtDecoder.decode(token).getIssuedAt();
+    }
+
+    public JwtDetails getJwtDetails(String token) {
+        return new JwtDetails(token,
+                getIssuedAt(token), getExpirationTime(token));
     }
 
 }

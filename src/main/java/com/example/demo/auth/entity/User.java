@@ -1,5 +1,6 @@
-package com.example.demo.auth;
+package com.example.demo.auth.entity;
 
+import com.example.demo.auth.enums.Role;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
