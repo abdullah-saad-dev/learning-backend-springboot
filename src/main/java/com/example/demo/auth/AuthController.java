@@ -1,6 +1,7 @@
 package com.example.demo.auth;
 
 import com.example.demo.auth.dto.JwtDetails;
+import com.example.demo.auth.dto.SignupRequest;
 import com.example.demo.auth.dto.Tokens;
 import com.example.demo.auth.entity.RefreshToken;
 import com.example.demo.auth.service.AuthService;
@@ -29,6 +30,11 @@ public class AuthController {
     public ResponseEntity<JwtDetails> refresh(@CookieValue("refreshToken") String refreshToken) {
         Tokens tokens = authService.refresh(refreshToken);
         return setCookieAndGetResponse(tokens);
+    }
+    @PostMapping("/signup")
+    public ResponseEntity<Void> Singup(@RequestBody SignupRequest request) {
+        authService.singup(request.email(), request.password(),request.username());
+        return ResponseEntity.ok().build();
     }
 
     private ResponseCookie createRefreshTokenCookie(String refreshToken) {
