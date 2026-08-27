@@ -8,6 +8,7 @@ import com.example.demo.auth.enums.RefreshTokenStatus;
 import com.example.demo.auth.repository.RefreshTokenRepository;
 import com.example.demo.auth.repository.UserRepository;
 import com.github.f4b6a3.uuid.UuidCreator;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +28,12 @@ public class RefreshTokenService {
     private final Clock clock;
 
     private final SecureRandom secureRandom;
+    @Value("${app.refreshToken.absolute-expiration-days}")
+    private int absoluteExpirationDays;
+    @Value("${app.refreshToken.ttl-days}")
+    private int refreshTokenTtlDays;
+    @Value("${app.refreshToken.rotation-grace-seconds}")
+    private int refreshTokenRotationGraceSeconds;
 
     public RefreshTokenService(RefreshTokenRepository refreshTokenRepository,
                                Clock clock) {
@@ -74,8 +81,8 @@ public class RefreshTokenService {
                 RefreshToken.builder()
                         .tokenHash(hashToken(token))
                         .status(RefreshTokenStatus.ACTIVE)
-                        .absoluteExpiresAt(now.plus(30, ChronoUnit.DAYS ))
-                        .expiresAt(now.plus(7, ChronoUnit.DAYS))
+                        .absoluteExpiresAt(now.plus(absoluteExpirationDays, ChronoUnit.DAYS ))
+                        .expiresAt(now.plus(refreshTokenTtlDays, ChronoUnit.DAYS))
                         .tokenString(token)
                         .issuedAt(now)
                         .userId(user.getId())
@@ -91,7 +98,7 @@ public class RefreshTokenService {
         return RefreshToken.builder()
                 .tokenHash(newTokenHash)
                 .issuedAt(now)
-                .expiresAt(now.plus(7, ChronoUnit.DAYS))
+                .expiresAt(now.plus(refreshTokenTtlDays, ChronoUnit.DAYS))
                 .absoluteExpiresAt(oldToken.getAbsoluteExpiresAt())
                 .familyId(oldToken.getFamilyId())
                 .userId(oldToken.getUserId())
@@ -105,10 +112,10 @@ public class RefreshTokenService {
                 || token.getAbsoluteExpiresAt().isBefore(now))
             throw new InvalidRefreshTokenException("expired");
         else if (token.getStatus() == RefreshTokenStatus.ROTATED
-                && token.getRotatedAt().isAfter(now.minusSeconds(30)))
+                && token.getRotatedAt().isAfter(now.minusSeconds(refreshTokenRotationGraceSeconds)))
             throw new InvalidRefreshTokenException("benign concurrent refresh");
         else if (token.getStatus() == RefreshTokenStatus.ROTATED
-                && token.getRotatedAt().isBefore(now.minusSeconds(30))){
+                && token.getRotatedAt().isBefore(now.minusSeconds(refreshTokenRotationGraceSeconds))){
             refreshTokenRepository.revokeFamily(token.getFamilyId());
             throw new InvalidRefreshTokenException("reuse detected");
         }

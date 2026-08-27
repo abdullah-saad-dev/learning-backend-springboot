@@ -7,6 +7,7 @@ import com.example.demo.auth.entity.RefreshToken;
 import com.example.demo.auth.service.AuthService;
 import com.example.demo.auth.dto.LoginRequest;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +17,8 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 public class AuthController {
     private final AuthService authService;
+    @Value("${app.refreshToken.ttl-seconds}")
+    private int refreshTokenTtlSeconds;
 
     public AuthController(AuthService authService) {
         this.authService = authService;
@@ -43,7 +46,7 @@ public class AuthController {
                 .httpOnly(true)
                 .secure(true)
                 .path("/auth/refresh")
-                .maxAge(7 * 24 * 60 * 60)
+                .maxAge(refreshTokenTtlSeconds)
                 .sameSite("Strict")
                 .build();
     }
