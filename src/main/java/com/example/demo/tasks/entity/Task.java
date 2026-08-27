@@ -7,8 +7,10 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
+import org.hibernate.annotations.UuidGenerator;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @NoArgsConstructor
 @AllArgsConstructor
@@ -27,9 +29,9 @@ public class Task {
     // Boxed so an unsaved task has a null id rather than 0, which is indistinguishable from a
     // real id and makes "has this been persisted yet?" unanswerable.
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @UuidGenerator(style = UuidGenerator.Style.VERSION_7)
     @Column(name = "id")
-    private Integer id;
+    private UUID id;
 
     @Column(name = "title")
     private String title;
@@ -43,6 +45,8 @@ public class Task {
     @Column(name = "done")
     private boolean done;
 
+    @Column(name = "owner_id")
+    private UUID ownerId;
 
     @Version
     @Column(name = "version")

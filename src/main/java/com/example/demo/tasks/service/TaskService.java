@@ -10,47 +10,49 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @Transactional(readOnly = true)
 public class TaskService {
-    private final TaskRepository tasks;
+    private final TaskRepository taskRepository;
 
     public TaskService(TaskRepository tasks) {
-        this.tasks = tasks;
+        this.taskRepository = tasks;
     }
 
-    public Task findById(int id) {
-        return read(id);
+    public Task findByIdAndOwnerId(UUID id, UUID ownerId) {
+        return read(id, ownerId);
     }
 
     @Transactional
-    public Task create(String title, String details, boolean done) {
-        return tasks.save(Task.builder()
+    public Task create(UUID ownerId, String title, String details, boolean done) {
+        return taskRepository.save(Task.builder()
                 .title(title)
                 .details(details)
                 .createdAt(Instant.now())
                 .done(done)
+                .ownerId(ownerId)
                 .build());
     }
 
     /**
-     * Full replace: everything the caller can set is overwritten, id and createdAt are not.
+     * Full replace: everything the caller can set is overwritten, id, ownerID and createdAt are not.
      */
     @Transactional
-    public Task update(int id, UpdateTaskRequest r) {
-        Task task = readAtVersion(id, r.version())
+    public Task update(UUID id, UUID ownerId,UpdateTaskRequest r) {
+        Task task = readAtVersion(id, ownerId, r.version())
                 .toBuilder()
                 .title(r.title())
                 .details(r.details())
                 .done(r.done())
                 .build();
-        return tasks.save(task);
+        return taskRepository.save(task);
     }
 
     @Transactional
-    public Task setDone(int id, boolean done, long expectedVersion) {
-        return tasks.save(readAtVersion(id, expectedVersion)
+    public Task setDone(UUID ownerId, UUID id, boolean done, long expectedVersion) {
+        return taskRepository.save(readAtVersion(id, ownerId, expectedVersion)
                 .toBuilder()
                 .done(done)
                 .build()
@@ -58,23 +60,23 @@ public class TaskService {
     }
 
     @Transactional
-    public void delete(int id, long expectedVersion) {
-        tasks.delete(readAtVersion(id, expectedVersion));
+    public void delete(UUID id, UUID ownerId, long expectedVersion) {
+        taskRepository.delete(readAtVersion(id, ownerId, expectedVersion));
     }
 
 
-    private Task read(int id) {
-        return tasks.findById(id).orElseThrow(() -> new TaskNotFoundException(id));
+    private Task read(UUID id, UUID ownerId) {
+        return taskRepository.findByIdAndOwnerId(id, ownerId).orElseThrow(() -> new TaskNotFoundException(id));
     }
 
-    private Task readAtVersion(int id, long expectedVersion) {
-        Task current = read(id);
+    private Task readAtVersion(UUID id, UUID ownerId, long expectedVersion) {
+        Task current = read(id, ownerId);
         if (current.getVersion() != expectedVersion)
             throw new TaskConflictException(id, expectedVersion, current.getVersion());
         return current;
     }
 
-    public List<Task> search(String title, Boolean done) {
-        return tasks.search(title, done);
+    public List<Task> search(UUID ownerId, String title, Boolean done) {
+        return taskRepository.search(title, ownerId, done);
     }
 }

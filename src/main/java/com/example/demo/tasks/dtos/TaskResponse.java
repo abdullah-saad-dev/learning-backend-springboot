@@ -4,6 +4,7 @@ import com.example.demo.tasks.entity.Task;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * What the API returns. Keeping this separate from TaskEntity means the JSON contract is not
@@ -13,7 +14,7 @@ import java.util.List;
  * "version" is the exception: it is deliberately published because a client cannot edit safely
  * without it. Read it here, send it back on the next PUT or PATCH.
  */
-public record TaskResponse(int id, String title, String details, Instant createdAt, boolean done,
+public record TaskResponse(UUID id, String title, String details, Instant createdAt, boolean done,
                            long version) {
 
     public static TaskResponse of(Task task) {
