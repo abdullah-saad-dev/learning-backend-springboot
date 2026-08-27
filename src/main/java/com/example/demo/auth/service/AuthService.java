@@ -5,15 +5,16 @@ import com.example.demo.auth.dto.Tokens;
 import com.example.demo.auth.dto.RotationResult;
 import com.example.demo.auth.entity.User;
 import com.example.demo.auth.repository.UserRepository;
-import jakarta.transaction.Transactional;
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
+
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Clock;
 
 @Service
 public class AuthService {
@@ -22,16 +23,19 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final RefreshTokenService refreshTokenService;
     private final PasswordEncoder passwordEncoder;
+    private final Clock clock;
 
-    public AuthService(UserRepository userRepository, JwtService jwtService,
+    public AuthService(UserRepository userRepository,
+                       JwtService jwtService,
                        AuthenticationManager authenticationManager,
                        RefreshTokenService refreshTokenService,
-                       PasswordEncoder passwordEncoder) {
+                       PasswordEncoder passwordEncoder, Clock clock) {
         this.userRepository = userRepository;
         this.jwtService = jwtService;
         this.authenticationManager = authenticationManager;
         this.refreshTokenService = refreshTokenService;
         this.passwordEncoder = passwordEncoder;
+        this.clock = clock;
     }
 
     public Tokens login(String email, String password) {
@@ -53,13 +57,13 @@ public class AuthService {
         return new Tokens(jwtService.getJwtDetails(accessToken), refreshToken);
     }
     @Transactional
-    public void singup(String email, String password, String username) {
+    public void signup(String email, String password, String username) {
         User user = User.builder()
                 .email(email)
                 .password(passwordEncoder.encode(password))
                 .username(username)
                 .enabled(true)
-                .createdAt(java.time.Instant.now())
+                .createdAt(clock.instant())
                 .build();
         userRepository.save(user);
     }

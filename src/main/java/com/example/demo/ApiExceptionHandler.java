@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -49,7 +50,12 @@ public class ApiExceptionHandler {
     public ProblemDetail handleAuthenticationException(AuthenticationException ex){
         return problem(HttpStatus.UNAUTHORIZED, "Unauthorized", "Bad credentials, please try again later");
     }
-
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ProblemDetail handle(DataIntegrityViolationException ex){
+        log.error("duplicate emails signup trial", ex);
+        return problem(HttpStatus.CONFLICT, "Conflicting change",
+                "The email is already registered, please try again later");
+    }
     /**
      * Anything unhandled. spring.mvc.problemdetails covers only Spring's own exceptions, so
      * without this an unexpected failure escapes as Boot's default error body and breaks the

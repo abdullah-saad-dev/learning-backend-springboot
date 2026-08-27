@@ -32,8 +32,8 @@ public class AuthController {
         return setCookieAndGetResponse(tokens);
     }
     @PostMapping("/signup")
-    public ResponseEntity<Void> Singup(@RequestBody SignupRequest request) {
-        authService.singup(request.email(), request.password(),request.username());
+    public ResponseEntity<Void> Signup(@RequestBody @Valid SignupRequest request) {
+        authService.signup(request.email(), request.password(),request.username());
         return ResponseEntity.ok().build();
     }
 
