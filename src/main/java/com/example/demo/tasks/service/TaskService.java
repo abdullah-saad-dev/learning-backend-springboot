@@ -51,7 +51,7 @@ public class TaskService {
     }
 
     @Transactional
-    public Task setDone(UUID ownerId, UUID id, boolean done, long expectedVersion) {
+    public Task setDone(UUID id, UUID ownerId, boolean done, long expectedVersion) {
         return taskRepository.save(readAtVersion(id, ownerId, expectedVersion)
                 .toBuilder()
                 .done(done)

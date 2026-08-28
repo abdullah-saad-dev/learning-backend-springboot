@@ -45,8 +45,8 @@ public class AuthService {
         AppUserDetails userDetails = (AppUserDetails) authentication.getPrincipal();
         User user = userDetails.getUser();
         String accessToken = jwtService.generateToken(user);
-        String newRefreshToken = refreshTokenService.mintToken(user);
-        return new Tokens(jwtService.getJwtDetails(accessToken), newRefreshToken);
+        String refreshToken = refreshTokenService.mintToken(user);
+        return new Tokens(jwtService.getJwtDetails(accessToken), refreshToken);
     }
     public Tokens refresh(String rawToken){
         RotationResult rotationResult = refreshTokenService.refresh(rawToken);

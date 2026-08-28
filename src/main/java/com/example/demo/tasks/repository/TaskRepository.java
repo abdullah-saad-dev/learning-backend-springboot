@@ -12,7 +12,7 @@ import java.util.UUID;
 
 
 @Repository
-public interface TaskRepository extends JpaRepository<Task, Integer> {
+public interface TaskRepository extends JpaRepository<Task, UUID> {
     @Query("""
     select t from Task as t
         where (cast(:title as String) is null or upper(t.title) = upper(cast(:title as String)))
