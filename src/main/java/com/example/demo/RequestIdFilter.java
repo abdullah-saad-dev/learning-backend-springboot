@@ -28,6 +28,8 @@ public class RequestIdFilter extends OncePerRequestFilter {
         response.setHeader(HEADER, requestId);
         try(MDC.MDCCloseable ignored = MDC.putCloseable(MDC_KEY, requestId)){
             chain.doFilter(request, response);
+        } finally {
+            MDC.clear();
         }
     }
 

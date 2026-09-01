@@ -50,18 +50,27 @@ public class AuthService {
         User user = userDetails.getUser();
         String accessToken = jwtService.generateToken(user);
         String refreshToken = refreshTokenService.mintToken(user);
-        log.info("user with id {} logged in", user.getId());
+        log.atInfo()
+                .setMessage("user logged in")
+                .addKeyValue("userId", user.getId())
+                .log();
         return new Tokens(jwtService.getJwtDetails(accessToken), refreshToken);
     }
-
     public Tokens refresh(String rawToken) {
         RotationResult rotationResult = refreshTokenService.refresh(rawToken);
         String refreshToken = rotationResult.rawRefreshToken();
         User user = userRepository.findById(rotationResult.userId())
                 .orElseThrow(() -> {
-                    log.warn("refresh token for user with id {} doesn't exist anymore", rotationResult.userId());
+                    log.atWarn()
+                            .setMessage("refresh token owner no longer exists")
+                            .addKeyValue("userId", rotationResult.userId())
+                            .log();
                     return new UsernameNotFoundException("the owner of the token doesn't exist anymore");
                 });
+        log.atDebug()
+                .setMessage("user refreshed")
+                .addKeyValue("userId", user.getId())
+                .log();
         String accessToken = jwtService.generateToken(user);
         return new Tokens(jwtService.getJwtDetails(accessToken), refreshToken);
     }
@@ -75,9 +84,13 @@ public class AuthService {
                     .enabled(true)
                     .createdAt(clock.instant())
                     .build();
-            //save and flush or otherwise it will throw outside the try block after the commit
+            //save and flush otherwise it will throw outside the try block after the commit,
+            // thus we won't be able to wrap it
             userRepository.saveAndFlush(user);
-            log.info("user with id {} signed up", user.getId());
+            log.atInfo()
+                    .setMessage("user signed up")
+                    .addKeyValue("userId", user.getId())
+                    .log();
         } catch (DataIntegrityViolationException e) {
             throw new DuplicateEmailsException("this email is already registered", email);
         }

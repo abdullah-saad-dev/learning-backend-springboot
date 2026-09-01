@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+
 @Slf4j
 @Service
 public class SweepingService {
@@ -22,7 +23,10 @@ public class SweepingService {
     @Scheduled(cron = "0 0 3 * * *")
     @Transactional
     public void sweep() {
-       int deletedRows = refreshTokenRepository.deleteByAbsoluteExpiresAtBefore(clock.instant());
-       log.info("Deleted {} expired refresh tokens", deletedRows);
+        int deletedRows = refreshTokenRepository.deleteByAbsoluteExpiresAtBefore(clock.instant());
+        log.atInfo()
+                .setMessage("swept expired refresh tokens")
+                .addKeyValue("deletedRows", deletedRows)
+                .log();
     }
 }

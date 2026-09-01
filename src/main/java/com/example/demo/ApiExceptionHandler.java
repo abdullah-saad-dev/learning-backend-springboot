@@ -75,7 +75,10 @@ public class ApiExceptionHandler {
         // looks, and that is worth having on by default. The address is deliberate and is the
         // only personal data logged anywhere - it is what makes that pattern visible, and it
         // inherits whatever retention your log store has.
-        log.info("signup rejected, email already registered: {}", ex.getEmail());
+        log.atInfo()
+                .setMessage("signup rejected, email already registered")
+                .addKeyValue("email", ex.getEmail())
+                .log();
         return problem(HttpStatus.CONFLICT, "Conflicting change",
                 "The email is already registered, please try again later");
     }
@@ -106,7 +109,7 @@ public class ApiExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public ProblemDetail handle(Exception ex) {
-        log.error("Unhandled exception serving request", ex);
+        log.error("unhandled exception serving request", ex);
         return problem(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error",
                 "The request could not be completed.");
     }

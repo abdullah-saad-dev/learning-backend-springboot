@@ -2,15 +2,16 @@
 
 A Spring Boot REST API built around the parts that usually get hand-waved: **refresh-token theft
 detection that can tell an attacker from a second browser tab**, optimistic locking that rejects
-stale writes instead of silently losing them, and a database schema owned by SQL migrations that
-every test run re-applies against real PostgreSQL.
+stale writes instead of silently losing them, a database schema owned by SQL migrations that every
+test run re-applies against real PostgreSQL, and structured logs where a security event is a
+queryable object rather than a sentence.
 
 **Java 25 · Spring Boot 4.0.6 · Spring Security 7.0.5 · PostgreSQL 18 · Flyway · JPA · Testcontainers · Docker**
-— 58 tests, all green.
+— 74 tests, all green.
 
 ---
 
-## Three things worth two minutes
+## Four things worth two minutes
 
 **1. A stolen refresh token and a second browser tab look identical. This tells them apart.**
 Every refresh rotates. So a token presented twice is either a replay or two tabs racing — and
@@ -38,10 +39,27 @@ lives on a proxy outside the bean and a `this.method()` call silently skips it.
 pins that with two byte-identical methods leaving `0` rows and `1`.
 
 **3. Tests run against real PostgreSQL, built by the real migration chain.**
-Testcontainers starts an empty Postgres 18; Flyway applies `V1`–`V3` exactly as it does in
+Testcontainers starts an empty Postgres 18; Flyway applies `V1`–`V5` exactly as it does in
 production, and `ddl-auto=validate` then checks every entity against the result. A column an entity
 expects and a migration forgets fails the build, not a deployment. No embedded stand-in reproduces
 `uuidv7()`, ICU collations, or `UPDATE ... WHERE version = ?` faithfully enough to be worth it.
+
+**4. Someone else's task is a `404`, not a `403`.**
+Ownership is a `WHERE owner_id = ?` predicate in the query, never an `if` after the read — so the
+read-then-check gap cannot exist, and no endpoint can forget the check. The status is deliberate:
+a `403` confirms the row exists, handing an attacker an enumeration oracle over other people's
+data. Same reasoning as the identical `401`s above.
+
+Every log line then carries a `requestId` from an `X-Request-Id`-aware filter and a `userId` from
+the MDC, and under `LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs` a token-theft event emits as:
+
+```json
+{"message":"reuse detected","log":{"level":"WARN"},"userId":"01a05c34-…",
+ "requestId":"d359b55f-…","familyId":"019ca945-…","rotatedAgoSeconds":31}
+```
+
+Four independent dimensions to query, a constant `message` you can group by, and a *number* for the
+replay age so `rotatedAgoSeconds > 3600` is a real question.
 
 ---
 
@@ -88,7 +106,7 @@ its next run fails on *"relation already exists"*.
 </details>
 
 ```bash
-./mvnw test        # 58 tests; needs only a Docker daemon, no database, no credentials
+./mvnw test        # 74 tests; needs only a Docker daemon, no database, no credentials
 ```
 
 ---
@@ -127,7 +145,9 @@ testing looks inexplicably broken.
 
 ### Tasks
 
-Authenticated. Every mutating request carries the `version` the client last read.
+Authenticated, and **scoped to the caller** — the owner comes from the token's `sub` claim and is
+never accepted from the request body. Every mutating request carries the `version` the client last
+read. A task owned by someone else answers `404` on every verb.
 
 | Method | Path | Success | Errors |
 |---|---|---|---|
@@ -139,8 +159,9 @@ Authenticated. Every mutating request carries the `version` the client last read
 | `DELETE` | `/api/tasks/{id}?version=n` | 204 | 400 · 404 · 409 |
 
 ```json
-{ "id": 1, "title": "write the schema", "details": "DDL for the tasks table",
-  "createdAt": "2026-07-31T12:36:49.962157Z", "done": true, "version": 1 }
+{ "id": "019ca945-0a00-74ce-ab8e-141ee1f1d033", "title": "write the schema",
+  "details": "DDL for the tasks table", "createdAt": "2026-07-31T12:36:49.962157Z",
+  "done": true, "version": 1 }
 ```
 
 `id`, `createdAt` and `version` are server-owned. `version` is published anyway, because a client
@@ -169,10 +190,16 @@ refusal on the errors it already renders — otherwise every malformed-JSON 400 
 
 **The schema is the source of truth.** `ddl-auto=validate`: Hibernate never creates or alters a
 table, it compares entities to the schema at startup and refuses to boot on a mismatch. Flyway
-applies `V1` tasks (integer identity PK, `version`), `V2` users (UUID v7 PK, ICU case-insensitive
-`email`, `CHECK` on `role`), `V3` refresh tokens (unique `token_hash`, FK `ON DELETE CASCADE`).
-The two are complementary: Flyway guarantees the schema was *built* the same way everywhere,
-validation guarantees the *entities still match it*.
+applies `V1` tasks, `V2` users (UUID v7 PK, ICU case-insensitive `email`, `CHECK` on `role`),
+`V3` refresh tokens (unique `token_hash`, FK `ON DELETE CASCADE`), `V4` task ownership and `V5` the
+task primary key. The two are complementary: Flyway guarantees the schema was *built* the same way
+everywhere, validation guarantees the *entities still match it*.
+
+**Ownership arrived by expand/migrate/contract.** `V4` adds `owner_id` nullable, backfills rows that
+predate it, then makes it `NOT NULL` — the three steps a live deployment needs, in a migration that
+is skipped entirely on a database with no orphans, so CI gets no junk row. `V5` then swaps the task
+primary key from an integer identity column to a UUID v7. Both are reviewable SQL, both run in every
+environment, and both are exercised by every test run.
 
 **Two tokens, two jobs.** The access token is stateless — verifying it is a signature check, no
 database round trip — and nothing can revoke it, which is exactly why it lives 15 minutes. The
@@ -244,9 +271,9 @@ would change the moment Hibernate assigned its id, losing it from any `HashSet` 
 
 | Suite | Tests | Scope |
 |---|---|---|
-| `TaskApiTest` | 23 | HTTP contract via MockMvc — statuses, media types, the version handshake |
-| `AuthApiTest` | 12 | A password becomes a token; that token opens a protected route |
-| `TaskRepositoryTest` | 11 | The store, through real committed transactions |
+| `TaskApiTest` | 31 | HTTP contract via MockMvc — statuses, media types, the version handshake, and the ownership boundary on every verb |
+| `TaskRepositoryTest` | 16 | The store, through real committed transactions |
+| `AuthApiTest` | 15 | A password becomes a token; that token opens a protected route; duplicate signup is a 409 |
 | `RefreshApiTest` | 10 | Rotation, the two-tab race, reuse detection, both expiries, cookie attributes |
 | `SelfInvocationTransactionDemoTest` | 1 | `REQUIRES_NEW` is skipped on a self-call |
 | `Demo1ApplicationTests` | 1 | Context loads — where Hibernate validates every entity and Spring parses every `@Query` |
@@ -268,26 +295,24 @@ A frozen clock can make two different behaviours look identical.
 
 Listed because they are known, scoped, and deliberate — not because they were missed.
 
-- **No logging in the auth package.** Since all five refresh-failure branches return an identical
-  401 *by design*, the log is the only channel that still knows the difference — so a family
-  revocation currently leaves no trace anywhere. This is the largest gap.
 - **`docker-compose.yml` does not forward `APP_JWT_SECRET`**, and `example.env` omits
   `app.jwt.secret`, so both documented setup paths need one manual line on a clean machine.
-- **Authorization is authentication-only.** `tasks` has no `owner_id`; every authenticated user
-  sees every task. Closing it needs expand/migrate/contract plus `WHERE owner_id = ?` — the
-  principal's `getName()` already returns the user UUID.
-- **No logout.** `revokeFamily` is exactly the operation needed and already exists; nothing calls
-  it outside reuse detection.
 - **Bearer-token 401s are not `problem+json`.** `AuthenticationEntryPoint` writes the response
   before `DispatcherServlet` exists, so `@ExceptionHandler` never sees it. The fix is
-  `exceptionHandling(...)` on the filter chain.
-- **`R__seed.sql` sits in `db/migration/`**, so the dev seed runs in every environment. It belongs
-  behind a dev-only `spring.flyway.locations`.
-- **Lifetimes are constants, not configuration** — 15 min / 7 days / 30 days / 30 s live in
-  `JwtService`, `RefreshTokenService` and `AuthController`. `app.jwt.accesstoken-validity-minutes`
-  is declared in `application.properties` and **read by nothing**.
+  `exceptionHandling(...)` on the filter chain, not another handler.
+- **`R__seed.sql` sits in `db/migration/`**, so the development seed — which creates a login — runs
+  in every environment. It belongs behind a dev-only `spring.flyway.locations`.
+- **No logout.** `revokeFamily` is exactly the operation needed and already exists; nothing calls it
+  outside reuse detection.
+- **The refresh-token lifetime is configured twice** — `app.refreshToken.ttl-days` feeds the row and
+  `app.refreshToken.ttl-seconds` feeds the cookie. Change one and they silently disagree; a single
+  `Duration` property should feed both.
+- **`JwtService.getJwtDetails` decodes the token twice**, once for `iat` and once for `exp`, when
+  `generateToken` already knew both.
+- **A token sitting exactly on an expiry boundary** falls past every `diagnoseToken` branch to the
+  final `else` and reports "revoked". Right status, wrong reason.
 - **Password policy is `@NotBlank` only.** A one-character password is accepted at signup.
-- **The nightly sweep discards its row count** and runs on every replica. Idempotent, so safe, but
-  duplicated; ShedLock or `pg_try_advisory_lock` is the production answer.
+- **The nightly sweep runs on every replica.** Idempotent, so safe, but duplicated; ShedLock or
+  `pg_try_advisory_lock` is the production answer.
 - **No CI pipeline, no pagination.** `./mvnw test` needs only a Docker daemon, so a workflow is
   cheap; list endpoints return every match, which a `Page` envelope would fix.
