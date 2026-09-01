@@ -1,12 +1,13 @@
 package com.example.demo.auth.service;
 
 import com.example.demo.auth.repository.RefreshTokenRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
-
+@Slf4j
 @Service
 public class SweepingService {
 
@@ -21,6 +22,7 @@ public class SweepingService {
     @Scheduled(cron = "0 0 3 * * *")
     @Transactional
     public void sweep() {
-        refreshTokenRepository.deleteByAbsoluteExpiresAtBefore(clock.instant());
+       int deletedRows = refreshTokenRepository.deleteByAbsoluteExpiresAtBefore(clock.instant());
+       log.info("Deleted {} expired refresh tokens", deletedRows);
     }
 }

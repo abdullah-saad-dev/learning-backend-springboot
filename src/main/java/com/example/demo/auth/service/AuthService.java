@@ -4,8 +4,11 @@ import com.example.demo.auth.AppUserDetails;
 import com.example.demo.auth.dto.Tokens;
 import com.example.demo.auth.dto.RotationResult;
 import com.example.demo.auth.entity.User;
+import com.example.demo.auth.exceptions.DuplicateEmailsException;
 import com.example.demo.auth.repository.UserRepository;
 
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -16,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 
+@Slf4j
 @Service
 public class AuthService {
     private final UserRepository userRepository;
@@ -46,25 +50,36 @@ public class AuthService {
         User user = userDetails.getUser();
         String accessToken = jwtService.generateToken(user);
         String refreshToken = refreshTokenService.mintToken(user);
+        log.info("user with id {} logged in", user.getId());
         return new Tokens(jwtService.getJwtDetails(accessToken), refreshToken);
     }
-    public Tokens refresh(String rawToken){
+
+    public Tokens refresh(String rawToken) {
         RotationResult rotationResult = refreshTokenService.refresh(rawToken);
         String refreshToken = rotationResult.rawRefreshToken();
         User user = userRepository.findById(rotationResult.userId())
-                .orElseThrow(() -> new UsernameNotFoundException("the owner of the token doesn't exist anymore"));
+                .orElseThrow(() -> {
+                    log.warn("refresh token for user with id {} doesn't exist anymore", rotationResult.userId());
+                    return new UsernameNotFoundException("the owner of the token doesn't exist anymore");
+                });
         String accessToken = jwtService.generateToken(user);
         return new Tokens(jwtService.getJwtDetails(accessToken), refreshToken);
     }
     @Transactional
     public void signup(String email, String password, String username) {
-        User user = User.builder()
-                .email(email)
-                .password(passwordEncoder.encode(password))
-                .username(username)
-                .enabled(true)
-                .createdAt(clock.instant())
-                .build();
-        userRepository.save(user);
+        try {
+            User user = User.builder()
+                    .email(email)
+                    .password(passwordEncoder.encode(password))
+                    .username(username)
+                    .enabled(true)
+                    .createdAt(clock.instant())
+                    .build();
+            //save and flush or otherwise it will throw outside the try block after the commit
+            userRepository.saveAndFlush(user);
+            log.info("user with id {} signed up", user.getId());
+        } catch (DataIntegrityViolationException e) {
+            throw new DuplicateEmailsException("this email is already registered", email);
+        }
     }
 }

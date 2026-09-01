@@ -1,13 +1,13 @@
 package com.example.demo.auth.service;
 
-import com.example.demo.auth.InvalidRefreshTokenException;
+import com.example.demo.auth.exceptions.InvalidRefreshTokenException;
 import com.example.demo.auth.dto.RotationResult;
 import com.example.demo.auth.entity.RefreshToken;
 import com.example.demo.auth.entity.User;
 import com.example.demo.auth.enums.RefreshTokenStatus;
 import com.example.demo.auth.repository.RefreshTokenRepository;
-import com.example.demo.auth.repository.UserRepository;
 import com.github.f4b6a3.uuid.UuidCreator;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,10 +17,12 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.HexFormat;
+@Slf4j
 @Service
 public class RefreshTokenService {
     private final RefreshTokenRepository refreshTokenRepository;
@@ -28,6 +30,7 @@ public class RefreshTokenService {
     private final Clock clock;
 
     private final SecureRandom secureRandom;
+
     @Value("${app.refreshToken.absolute-expiration-days}")
     private int absoluteExpirationDays;
     @Value("${app.refreshToken.ttl-days}")
@@ -66,22 +69,26 @@ public class RefreshTokenService {
         String hashToken = hashToken(rawToken);
         int rotatedTokens = refreshTokenRepository.markRotated(hashToken, now);
         RefreshToken token = refreshTokenRepository.findByTokenHash(hashToken)
-                .orElseThrow(() -> new InvalidRefreshTokenException("Token not found"));
+                .orElseThrow(() -> {
+                    log.debug("Token not found");
+                    return new InvalidRefreshTokenException("Token not found");
+                });
         if (rotatedTokens == 0) {
             diagnoseToken(token, now);
         }
         RefreshToken newToken = refreshTokenRepository.save(generateNewToken(token, now));
-        return  new RotationResult(newToken.getTokenString(), newToken.getUserId());
+        return new RotationResult(newToken.getTokenString(), newToken.getUserId());
     }
+
     @Transactional
-    public String mintToken(User user){
+    public String mintToken(User user) {
         String token = generateToken();
         Instant now = clock.instant();
         refreshTokenRepository.save(
                 RefreshToken.builder()
                         .tokenHash(hashToken(token))
                         .status(RefreshTokenStatus.ACTIVE)
-                        .absoluteExpiresAt(now.plus(absoluteExpirationDays, ChronoUnit.DAYS ))
+                        .absoluteExpiresAt(now.plus(absoluteExpirationDays, ChronoUnit.DAYS))
                         .expiresAt(now.plus(refreshTokenTtlDays, ChronoUnit.DAYS))
                         .tokenString(token)
                         .issuedAt(now)
@@ -109,17 +116,31 @@ public class RefreshTokenService {
 
     private void diagnoseToken(RefreshToken token, Instant now) {
         if (token.getExpiresAt().isBefore(now)
-                || token.getAbsoluteExpiresAt().isBefore(now))
+                || token.getAbsoluteExpiresAt().isBefore(now)) {
+            log.debug("Token expired for user ID: {} and family ID: {}",
+                    token.getUserId(),
+                    token.getFamilyId());
             throw new InvalidRefreshTokenException("expired");
-        else if (token.getStatus() == RefreshTokenStatus.ROTATED
-                && token.getRotatedAt().isAfter(now.minusSeconds(refreshTokenRotationGraceSeconds)))
+        } else if (token.getStatus() == RefreshTokenStatus.ROTATED
+                && token.getRotatedAt().isAfter(now.minusSeconds(refreshTokenRotationGraceSeconds))) {
+            log.debug("concurrent refresh, token reused after {} of being rotated for user ID: {} and family ID: {}",
+                    Duration.between(token.getRotatedAt(), now),
+                    token.getUserId(),
+                    token.getFamilyId());
             throw new InvalidRefreshTokenException("benign concurrent refresh");
-        else if (token.getStatus() == RefreshTokenStatus.ROTATED
-                && token.getRotatedAt().isBefore(now.minusSeconds(refreshTokenRotationGraceSeconds))){
+        } else if (token.getStatus() == RefreshTokenStatus.ROTATED
+                && token.getRotatedAt().isBefore(now.minusSeconds(refreshTokenRotationGraceSeconds))) {
             refreshTokenRepository.revokeFamily(token.getFamilyId());
-            throw new InvalidRefreshTokenException("reuse detected");
+            log.warn("reuse detected, token reused after {} of being rotated for user ID: {} and family ID: {}",
+                    Duration.between(token.getRotatedAt(), now),
+                    token.getUserId(),
+                    token.getFamilyId());
+            throw new InvalidRefreshTokenException("token reuse detected");
+        } else {
+            log.debug("token revoked for user ID: {} and family ID: {}",
+                    token.getUserId(),
+                    token.getFamilyId());
+            throw new InvalidRefreshTokenException("token revoked");
         }
-        else
-            throw new InvalidRefreshTokenException("Token revoked");
     }
 }
