@@ -9,7 +9,7 @@
 -- hand every row the same value and the primary key below would fail. It also stays
 -- in place afterwards for inserts that do not name an id, which is how R__seed.sql
 -- writes; application writes get theirs from Hibernate's @UuidGenerator instead.
-ALTER TABLE tasks ADD COLUMN id_uuid uuid NOT NULL DEFAULT uuidv7();
+ALTER TABLE tasks ADD COLUMN id_uuid UUID NOT NULL DEFAULT UUIDV7();
 
 
 ALTER TABLE tasks DROP COLUMN id CASCADE;

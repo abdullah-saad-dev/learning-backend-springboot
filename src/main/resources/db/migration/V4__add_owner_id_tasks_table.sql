@@ -2,7 +2,7 @@
 --
 -- Expand. The column arrives nullable so rows written before this migration stay
 -- valid, and so a running instance of the previous version can keep inserting.
-ALTER TABLE tasks ADD COLUMN owner_id uuid;
+ALTER TABLE tasks ADD COLUMN owner_id UUID;
 
 -- Migrate. Rows that predate ownership need an owner before the column can be made
 -- NOT NULL, and there is no way to know who wrote them, so they are adopted by a
@@ -12,11 +12,11 @@ ALTER TABLE tasks ADD COLUMN owner_id uuid;
 -- which is every fresh one - CI included - so nothing junk is created there.
 DO $$
 DECLARE
-    placeholder_owner uuid;
+    placeholder_owner UUID;
 BEGIN
     IF EXISTS (SELECT 1 FROM tasks WHERE owner_id IS NULL) THEN
         INSERT INTO users (username, email, password_hash, role, enabled)
-        VALUES ('unclaimed', 'unclaimed@invalid', 'x', 'USER', false)
+        VALUES ('unclaimed', 'unclaimed@invalid', 'x', 'USER', FALSE)
         RETURNING id INTO placeholder_owner;
 
         UPDATE tasks SET owner_id = placeholder_owner WHERE owner_id IS NULL;

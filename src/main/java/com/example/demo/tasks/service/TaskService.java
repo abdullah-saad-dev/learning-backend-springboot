@@ -8,6 +8,7 @@ import com.example.demo.tasks.repository.TaskRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -16,9 +17,11 @@ import java.util.UUID;
 @Transactional(readOnly = true)
 public class TaskService {
     private final TaskRepository taskRepository;
+    private final Clock clock;
 
-    public TaskService(TaskRepository tasks) {
-        this.taskRepository = tasks;
+    public TaskService(TaskRepository taskRepository, Clock clock) {
+        this.taskRepository = taskRepository;
+        this.clock = clock;
     }
 
     public Task findByIdAndOwnerId(UUID id, UUID ownerId) {
@@ -30,7 +33,7 @@ public class TaskService {
         return taskRepository.save(Task.builder()
                 .title(title)
                 .details(details)
-                .createdAt(Instant.now())
+                .createdAt(clock.instant())
                 .done(done)
                 .ownerId(ownerId)
                 .build());
