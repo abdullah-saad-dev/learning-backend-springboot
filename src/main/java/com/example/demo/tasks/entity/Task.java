@@ -1,5 +1,7 @@
 package com.example.demo.tasks.entity;
 
+import com.example.demo.auth.entity.User;
+import com.example.demo.project.Project;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -10,6 +12,7 @@ import lombok.ToString;
 import org.hibernate.annotations.UuidGenerator;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @NoArgsConstructor
@@ -42,13 +45,22 @@ public class Task {
     @Column(name = "created_at")
     private Instant createdAt;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name ="project_id", nullable = false)
+    private Project project;
+
     @Column(name = "done")
     private boolean done;
-
-    @Column(name = "owner_id")
-    private UUID ownerId;
 
     @Version
     @Column(name = "version")
     private Long version;
+
+    @ManyToMany
+    @JoinTable(
+            name = "tasks_users",
+            joinColumns = @JoinColumn(name = "task_id"),
+            inverseJoinColumns = @JoinColumn(name = "user_id")
+    )
+    private List<User> assignees;
 }

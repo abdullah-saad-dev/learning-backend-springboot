@@ -17,10 +17,10 @@ CREATE TABLE projects
 );
 CREATE INDEX idx_projects_leader_id ON projects (leader_id);
 
-CREATE TABLE project_users
+CREATE TABLE projects_users
 (
     project_id UUID NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
     user_id    UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     PRIMARY KEY (project_id, user_id)
 );
-CREATE INDEX idx_project_users_user_id ON project_users (user_id);
+CREATE INDEX idx_project_users_user_id ON projects_users (user_id);

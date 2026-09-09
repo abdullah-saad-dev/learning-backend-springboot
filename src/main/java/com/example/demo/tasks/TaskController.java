@@ -30,20 +30,18 @@ public class TaskController {
 
     @GetMapping
     public List<TaskResponse> findAll(@RequestParam(name = "title", required = false) String title,
-                                      @RequestParam(name = "done", required = false) Boolean done,
-                                      @AuthenticationPrincipal Jwt jwt) {
-        return TaskResponse.of(service.search(getOwnerId(jwt), title, done));
+                                      @RequestParam(name = "done", required = false) Boolean done) {
+        return TaskResponse.of(service.search(title, done));
     }
     // authentication.getName() returns the principle claim name which was set to sub in JwtConfig class
     @GetMapping("/{id}")
-    public TaskResponse findById(@PathVariable("id") UUID id, @AuthenticationPrincipal Jwt jwt) {
-        return TaskResponse.of(service.findByIdAndOwnerId(id, getOwnerId(jwt)));
+    public TaskResponse findById(@PathVariable("id") UUID id) {
+        return TaskResponse.of(service.findById(id));
     }
 
     @PostMapping
-    public ResponseEntity<TaskResponse> create(@Valid @RequestBody CreateTaskRequest r,
-                                               @AuthenticationPrincipal Jwt jwt) {
-        TaskResponse task = TaskResponse.of(service.create(getOwnerId(jwt), r.title(), r.details(), r.done()));
+    public ResponseEntity<TaskResponse> create(@Valid @RequestBody CreateTaskRequest r) {
+        TaskResponse task = TaskResponse.of(service.create(r.title(), r.details(), r.done()));
         return ResponseEntity.created(createUri(task.id())).body(task);
     }
 
@@ -56,31 +54,25 @@ public class TaskController {
 
     @PatchMapping("/{id}/done")
     public ResponseEntity<TaskResponse> setDone(@PathVariable("id") UUID id,
-                                                @Valid @RequestBody SetDoneRequest r,
-                                                @AuthenticationPrincipal Jwt jwt) {
-
-        Task patchedTask = service.setDone(id, getOwnerId(jwt), r.done(), r.version());
+                                                @Valid @RequestBody SetDoneRequest r) {
+        UUID tempID = UUID.randomUUID();
+        Task patchedTask = service.setDone(id,tempID , r.done(), r.version());
         TaskResponse taskResponse = TaskResponse.of(patchedTask);
         return ResponseEntity.ok(taskResponse);
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable("id") UUID id,
-                                       @RequestParam("version") long version,
-                                       @AuthenticationPrincipal Jwt jwt) {
-        service.delete(id, getOwnerId(jwt),version);
+                                       @RequestParam("version") long version) {
+        service.delete(id, version);
         return ResponseEntity.noContent().build();
     }
 
     @PutMapping({"/{id}"})
     public ResponseEntity<TaskResponse> updateTask(@PathVariable("id") UUID id,
-                                                   @Valid @RequestBody UpdateTaskRequest r,
-                                                   @AuthenticationPrincipal Jwt jwt) {
-        Task updatedRequest = service.update(id, getOwnerId(jwt), r);
+                                                   @Valid @RequestBody UpdateTaskRequest r) {
+        Task updatedRequest = service.update(id, r);
         TaskResponse taskResponse = TaskResponse.of(updatedRequest);
         return ResponseEntity.ok(taskResponse);
-    }
-    private UUID getOwnerId(Jwt jwt) {
-        return UUID.fromString(jwt.getSubject());
     }
 }

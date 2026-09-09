@@ -24,18 +24,17 @@ public class TaskService {
         this.clock = clock;
     }
 
-    public Task findByIdAndOwnerId(UUID id, UUID ownerId) {
-        return read(id, ownerId);
+    public Task findById(UUID id) {
+        return read(id);
     }
 
     @Transactional
-    public Task create(UUID ownerId, String title, String details, boolean done) {
+    public Task create(String title, String details, boolean done) {
         return taskRepository.save(Task.builder()
                 .title(title)
                 .details(details)
                 .createdAt(clock.instant())
                 .done(done)
-                .ownerId(ownerId)
                 .build());
     }
 
@@ -43,8 +42,8 @@ public class TaskService {
      * Full replace: everything the caller can set is overwritten, id, ownerID and createdAt are not.
      */
     @Transactional
-    public Task update(UUID id, UUID ownerId,UpdateTaskRequest r) {
-        Task task = readAtVersion(id, ownerId, r.version())
+    public Task update(UUID id, UpdateTaskRequest r) {
+        Task task = readAtVersion(id, r.version())
                 .toBuilder()
                 .title(r.title())
                 .details(r.details())
@@ -54,8 +53,8 @@ public class TaskService {
     }
 
     @Transactional
-    public Task setDone(UUID id, UUID ownerId, boolean done, long expectedVersion) {
-        return taskRepository.save(readAtVersion(id, ownerId, expectedVersion)
+    public Task setDone(UUID id, UUID assigneeId, boolean done, long expectedVersion) {
+        return taskRepository.save(readAtVersion(id, expectedVersion)
                 .toBuilder()
                 .done(done)
                 .build()
@@ -63,23 +62,23 @@ public class TaskService {
     }
 
     @Transactional
-    public void delete(UUID id, UUID ownerId, long expectedVersion) {
-        taskRepository.delete(readAtVersion(id, ownerId, expectedVersion));
+    public void delete(UUID id, long expectedVersion) {
+        taskRepository.delete(readAtVersion(id, expectedVersion));
     }
 
 
-    private Task read(UUID id, UUID ownerId) {
-        return taskRepository.findByIdAndOwnerId(id, ownerId).orElseThrow(() -> new TaskNotFoundException(id));
+    private Task read(UUID id) {
+        return taskRepository.findById(id).orElseThrow(() -> new TaskNotFoundException(id));
     }
 
-    private Task readAtVersion(UUID id, UUID ownerId, long expectedVersion) {
-        Task current = read(id, ownerId);
+    private Task readAtVersion(UUID id, long expectedVersion) {
+        Task current = read(id);
         if (current.getVersion() != expectedVersion)
             throw new TaskConflictException(id, expectedVersion, current.getVersion());
         return current;
     }
 
-    public List<Task> search(UUID ownerId, String title, Boolean done) {
-        return taskRepository.search(title, ownerId, done);
+    public List<Task> search(String title, Boolean done) {
+        return taskRepository.search(title, done);
     }
 }

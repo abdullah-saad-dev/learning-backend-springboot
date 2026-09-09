@@ -13,15 +13,15 @@ import java.util.UUID;
 
 @Repository
 public interface TaskRepository extends JpaRepository<Task, UUID> {
+    // hibernate infers the type directly from the column but not from functions output
     @Query("""
     select t from Task as t
         where (cast(:title as String) is null or upper(t.title) = upper(cast(:title as String)))
-        and (:done is null or t.done = :done)   
-        and :ownerId = t.ownerId        
+        and (:done is null or t.done = :done)           
         order by t.createdAt desc       
     """)
-    List<Task> search(@Param("title") String title, @Param("ownerId") UUID ownerId, @Param("done") Boolean done);
+    List<Task> search(@Param("title") String title, @Param("done") Boolean done);
 
-    Optional<Task> findByIdAndOwnerId(UUID taskId, UUID ownerId);
+    Optional<Task> findById(UUID taskId);
 
 }

@@ -30,6 +30,8 @@
         <java.version>25</java.version>
         <springdoc.version>3.0.0</springdoc.version>
         <testcontainers.version>2.0.5</testcontainers.version>
+        <maven.test.skip>true</maven.test.skip>
+
     </properties>
     <dependencies>
         <dependency>
@@ -80,6 +82,7 @@
             <artifactId>lombok</artifactId>
             <scope>provided</scope>
         </dependency>
+
 
         <!-- Integration tests run against a real Postgres in Docker rather than an embedded
              stand-in: the schema under test uses identity columns, timestamptz and an

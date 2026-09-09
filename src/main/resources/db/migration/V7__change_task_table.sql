@@ -20,7 +20,7 @@ BEGIN
         VALUES ('Personal', 'Tasks migrated from individual ownership', orphan_owner, CURRENT_DATE, CURRENT_DATE)
         RETURNING id INTO owner_project;
 
-        INSERT INTO project_users (project_id, user_id)
+        INSERT INTO projects_users (project_id, user_id)
         VALUES (owner_project, orphan_owner);
 
         UPDATE tasks SET project_id = owner_project

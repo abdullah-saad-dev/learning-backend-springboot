@@ -31,7 +31,7 @@ ON CONFLICT (id) DO NOTHING;
 
 -- Leading a project does not make you a member of it - project_users is the only
 -- table the access rules read - so the leader is inserted here as well.
-INSERT INTO project_users (project_id, user_id)
+INSERT INTO projects_users (project_id, user_id)
 VALUES ('01f114c3-1a40-7b21-9c55-2f6d0e83a411', '01f114c2-5520-77a8-9226-cbfd1ea7e4b2'),
        ('01f114c3-1a40-7b21-9c55-2f6d0e83a412', '01f114c2-5520-77a8-9226-cbfd1ea7e4b2')
 ON CONFLICT (project_id, user_id) DO NOTHING;
