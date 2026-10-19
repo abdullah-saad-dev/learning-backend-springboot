@@ -23,6 +23,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -100,6 +101,39 @@ public class RefreshTokenService {
                         .build()
         );
         return token;
+    }
+
+    /**
+     * Ends the session behind this cookie: the whole family, not just the presented token,
+     * so a copy of an older rotation cannot be replayed afterwards. Idempotent - an unknown,
+     * expired or already-revoked token is not an error, because the caller's goal (this
+     * device signed out) already holds.
+     */
+    @Transactional
+    public void logout(String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) {
+            return;
+        }
+        refreshTokenRepository.findByTokenHash(hashToken(rawToken)).ifPresent(token -> {
+            int revoked = refreshTokenRepository.revokeFamily(token.getFamilyId());
+            log.atInfo()
+                    .setMessage("user logged out")
+                    .addKeyValue("userId", token.getUserId())
+                    .addKeyValue("familyId", token.getFamilyId())
+                    .addKeyValue("revokedTokens", revoked)
+                    .log();
+        });
+    }
+
+    /** Ends every session the user has, on every device. */
+    @Transactional
+    public void logoutAll(UUID userId) {
+        int revoked = refreshTokenRepository.revokeAllForUser(userId);
+        log.atInfo()
+                .setMessage("user logged out everywhere")
+                .addKeyValue("userId", userId)
+                .addKeyValue("revokedTokens", revoked)
+                .log();
     }
 
     private RefreshToken generateNewToken(RefreshToken oldToken, Instant now) {

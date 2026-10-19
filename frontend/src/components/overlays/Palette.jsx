@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { roleClass } from '../../lib/roles.js';
+import { isLead, roleClass } from '../../lib/roles.js';
 
-export default function Palette({ projects, onClose, onView, onSessions, onLogout }) {
+export default function Palette({ projects, onClose, onView, onLogout }) {
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const input = useRef(null);
@@ -15,17 +15,16 @@ export default function Palette({ projects, onClose, onView, onSessions, onLogou
       ...projects.map((p) => ({
         key: p.id,
         label: p.name,
-        cat: p.role === 'LEADER' ? 'Lead' : 'Member',
+        cat: isLead(p.role) ? 'Lead' : 'Member',
         role: roleClass(p),
         run: () => onView({ type: 'project', id: p.id })
       })),
-      { key: 'sessions', label: 'Active sessions', cat: 'Account', run: onSessions },
       { key: 'out', label: 'Log out of this device', cat: 'Account', run: () => onLogout('this') },
       { key: 'outall', label: 'Log out of all devices', cat: 'Account', run: () => onLogout('all') }
     ];
     const needle = query.trim().toLowerCase();
     return needle ? all.filter((x) => x.label.toLowerCase().includes(needle)) : all;
-  }, [query, projects, onView, onSessions, onLogout]);
+  }, [query, projects, onView, onLogout]);
 
   useEffect(() => { setActive(0); }, [query]);
 

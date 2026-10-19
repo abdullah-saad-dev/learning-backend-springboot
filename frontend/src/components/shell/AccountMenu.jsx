@@ -9,7 +9,7 @@ import { initials } from '../../lib/roles.js';
  * family the user owns — and the difference matters to someone who thinks
  * they left a session open on a shared machine.
  */
-export default function AccountMenu({ me, onSessions, onLogout }) {
+export default function AccountMenu({ me, onLogout }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -31,8 +31,6 @@ export default function AccountMenu({ me, onSessions, onLogout }) {
     <div className="rail-foot" ref={ref}>
       {open && (
         <div className="menu" role="menu">
-          <button role="menuitem" onClick={pick(onSessions)}>Active sessions</button>
-          <hr />
           <button role="menuitem" className="danger" onClick={pick(() => onLogout('this'))}>
             Log out of this device
           </button>

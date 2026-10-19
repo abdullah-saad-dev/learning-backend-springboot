@@ -37,6 +37,9 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health/**","/actuator/info").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**",
                                 "/swagger-ui.html", "/docs").permitAll()
+                        // Before the /auth/** permitAll: first match wins, and these two act on
+                        // the signed-in user, so an anonymous caller has no one to act on.
+                        .requestMatchers("/auth/me", "/auth/logout-all").authenticated()
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers("/api/tasks/**").authenticated()
                         .anyRequest().authenticated()

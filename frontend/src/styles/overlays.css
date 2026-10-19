@@ -43,32 +43,6 @@
   background: var(--panel);
 }
 
-.session {
-  display: grid;
-  grid-template-columns: minmax(0,1fr) auto;
-  gap: 12px;
-  align-items: center;
-  padding: 11px 0;
-  border-bottom: 1px solid var(--line);
-}
-.session:last-child { border-bottom: 0; }
-.session b { display: block; font-weight: 500; font-size: 13px; margin-bottom: 3px; }
-.session .mono { display: block; }
-.session .this {
-  display: inline-block;
-  margin-left: 7px;
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: .07em;
-  color: var(--ok);
-  border: 1px solid rgba(79,169,123,.4);
-  border-radius: 3px;
-  padding: 1px 4px;
-  vertical-align: 1px;
-}
-.session button { font-size: 12.5px; color: var(--txt-mute); }
-.session button:hover { color: var(--warn); }
-
 /* command palette */
 .palette { width: 100%; max-width: 520px; }
 .palette input {

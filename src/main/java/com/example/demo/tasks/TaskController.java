@@ -40,7 +40,8 @@ public class TaskController {
 
     @PostMapping
     public ResponseEntity<TaskResponse> create(@Valid @RequestBody CreateTaskRequest r) {
-        TaskResponse task = TaskResponse.of(service.create(r.projectId(), r.title(), r.details(), r.done()));
+        TaskResponse task = TaskResponse.of(service.create(r.projectId(), r.title(), r.details(), r.done(),
+                r.dueDate(), r.assigneeId()));
         return ResponseEntity.created(createUri(task.id())).body(task);
     }
 

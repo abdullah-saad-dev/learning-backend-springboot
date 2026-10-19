@@ -8,7 +8,6 @@ import TopBar from './components/shell/TopBar.jsx';
 import TaskList from './components/tasks/TaskList.jsx';
 import Inspector from './components/tasks/Inspector.jsx';
 import Palette from './components/overlays/Palette.jsx';
-import SessionsSheet from './components/overlays/SessionsSheet.jsx';
 import ConfirmSheet from './components/overlays/ConfirmSheet.jsx';
 
 function emptyCopyFor({ query, filter, view }) {
@@ -41,7 +40,6 @@ export default function App() {
   const [conflictOn, setConflictOn] = useState(null);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [sessionsOpen, setSessionsOpen] = useState(false);
   const [confirmScope, setConfirmScope] = useState(null);
   const [toast, setToast] = useState(null);
 
@@ -115,7 +113,6 @@ export default function App() {
 
   async function doLogout(scope) {
     setConfirmScope(null);
-    setSessionsOpen(false);
     await (scope === 'all' ? api.logoutEverywhere() : api.logout());
     setMe(null);
     setMode('login');
@@ -140,7 +137,6 @@ export default function App() {
       <Rail
         me={me} projects={projects} tasks={tasks} view={view}
         onView={goTo}
-        onSessions={() => setSessionsOpen(true)}
         onLogout={setConfirmScope}
       />
 
@@ -176,16 +172,7 @@ export default function App() {
           projects={projects}
           onClose={() => setPaletteOpen(false)}
           onView={goTo}
-          onSessions={() => setSessionsOpen(true)}
           onLogout={setConfirmScope}
-        />
-      )}
-
-      {sessionsOpen && (
-        <SessionsSheet
-          onClose={() => setSessionsOpen(false)}
-          onLogoutAll={() => setConfirmScope('all')}
-          notify={notify}
         />
       )}
 

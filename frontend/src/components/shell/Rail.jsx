@@ -9,9 +9,9 @@ import AccountMenu from './AccountMenu.jsx';
  * Projects are grouped by role rather than sorted into one list, because the
  * grouping is the answer to the question the colour code raises.
  */
-export default function Rail({ me, projects, tasks, view, onView, onSessions, onLogout }) {
-  const led = projects.filter((p) => p.role === 'LEADER');
-  const joined = projects.filter((p) => p.role !== 'LEADER');
+export default function Rail({ me, projects, tasks, view, onView, onLogout }) {
+  const led = projects.filter((p) => p.role === 'LEADER' || p.role === 'MANAGER');
+  const joined = projects.filter((p) => p.role !== 'LEADER' && p.role !== 'MANAGER');
 
   const openMine = tasks.filter((t) => t.assigneeId === me.id && !t.done).length;
   const openAll = tasks.filter((t) => !t.done).length;
@@ -46,7 +46,7 @@ export default function Rail({ me, projects, tasks, view, onView, onSessions, on
                       openCountFor={openCountFor} onView={onView} />
       </div>
 
-      <AccountMenu me={me} onSessions={onSessions} onLogout={onLogout} />
+      <AccountMenu me={me} onLogout={onLogout} />
     </nav>
   );
 }

@@ -37,6 +37,17 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID
 
     """)
     int revokeFamily(@Param("familyId") UUID familyId);
+
+    // Every family the user owns, i.e. every device. Rotated and already-revoked rows are
+    // left alone: only ACTIVE tokens can still be exchanged, so they are all that matter.
+    @Modifying
+    @Query("""
+    update RefreshToken t
+    set t.status = com.example.demo.auth.enums.RefreshTokenStatus.REVOKED
+    where t.userId = :userId
+        and t.status = com.example.demo.auth.enums.RefreshTokenStatus.ACTIVE
+    """)
+    int revokeAllForUser(@Param("userId") UUID userId);
     @Modifying
     @Query("""
      delete from RefreshToken t

@@ -1,6 +1,7 @@
 package com.example.demo;
 
 import com.example.demo.auth.exceptions.DuplicateEmailsException;
+import com.example.demo.tasks.exceptions.InvalidAssigneeException;
 import com.example.demo.tasks.exceptions.TaskConflictException;
 import com.example.demo.tasks.exceptions.TaskNotFoundException;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +32,15 @@ public class ApiExceptionHandler {
                 .addKeyValue("error", ex.getMessage())
                 .log();
         return problem(HttpStatus.NOT_FOUND, "Task not found", ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidAssigneeException.class)
+    public ProblemDetail handle(InvalidAssigneeException ex) {
+        log.atDebug()
+                .setMessage("assignee rejected")
+                .addKeyValue("error", ex.getMessage())
+                .log();
+        return problem(HttpStatus.BAD_REQUEST, "Invalid assignee", ex.getMessage());
     }
 
     /**

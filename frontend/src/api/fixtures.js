@@ -85,11 +85,5 @@ export const FIXTURES = {
       details: '',
       projectId: 'p5', assigneeId: 'u9', done: false, version: 0, dueDate: '2026-11-30',
       createdAt: '2026-09-05T20:10:00Z' }
-  ],
-
-  sessions: [
-    { familyId: '01f11a3c-8f21-7c04-9a11-4b7d2e6f0011', device: 'Chrome on Windows',  ip: '197.45.12.8',   lastSeenAt: '2026-09-09T08:41:00Z', current: true },
-    { familyId: '01f0f8d1-2c55-7bb9-8e30-9d1c7a4e5522', device: 'Firefox on Windows', ip: '197.45.12.8',   lastSeenAt: '2026-09-07T21:03:00Z', current: false },
-    { familyId: '01f0e2a7-77b3-7d18-83c2-1e5f9b0c8833', device: 'Safari on iPhone',   ip: '41.238.90.140', lastSeenAt: '2026-09-02T17:55:00Z', current: false }
   ]
 };

@@ -42,36 +42,44 @@ export async function refresh() {
   return me();
 }
 
-/**
- * MOCK — needs GET /auth/me → { id, username, email, role }
- * The JWT carries sub and role but no display name, so there is no way to
- * show who is signed in without this.
- */
-export async function me() { await wait(120); return clone(FIXTURES.me); }
+/** REAL — GET /auth/me → { id, username, email, role } */
+export async function me() {
+  if (!USE_LIVE_API) { await wait(120); return clone(FIXTURES.me); }
+  return http('/auth/me');
+}
 
 /**
- * MOCK — needs POST /auth/logout
- * Revokes the family behind the current refresh cookie and clears it with
- * Max-Age=0. RefreshTokenRepository.revokeFamily is already the revoking half.
+ * REAL — POST /auth/logout → 204
+ * Revokes the family behind the refresh cookie and clears it. Needs only the
+ * cookie, so it works even after the access token has expired.
  */
-export async function logout() { await wait(200); return { ok: true }; }
-
-/** MOCK — needs POST /auth/logout-all: every family for the user, not just this one. */
-export async function logoutEverywhere() { await wait(320); return { ok: true }; }
+export async function logout() {
+  if (!USE_LIVE_API) { await wait(200); return null; }
+  try {
+    return await http('/auth/logout', { method: 'POST' });
+  } finally {
+    setAccessToken(null);
+  }
+}
 
 /**
- * MOCK — needs GET /auth/sessions → [{ familyId, device, ip, lastSeenAt, current }]
- * One row per refresh-token family. The rows already exist in refresh_tokens;
- * nothing exposes them.
+ * REAL — POST /auth/logout-all → 204: every family the user owns, not just
+ * this one. Unlike logout this throws on failure and keeps the token, so the
+ * caller can tell the user the other devices are still signed in.
  */
-export async function listSessions() { await wait(240); return clone(FIXTURES.sessions); }
+export async function logoutEverywhere() {
+  if (!USE_LIVE_API) { await wait(320); return null; }
+  await http('/auth/logout-all', { method: 'POST' });
+  setAccessToken(null);
+  return null;
+}
 
 /* ── Tasks ──────────────────────────────────────────────────────────── */
 
 /**
  * REAL — GET /api/tasks?title=&done=
- * Returns [{ id, title, details, createdAt, done, version }] — note there is
- * no projectId and no assignee on the response yet.
+ * Returns [{ id, projectId, title, details, dueDate, assigneeId, createdAt,
+ *            done, version }] for every project the caller belongs to.
  */
 export async function listTasks({ title, done } = {}) {
   if (!USE_LIVE_API) { await wait(260); return clone(FIXTURES.tasks); }
@@ -81,7 +89,10 @@ export async function listTasks({ title, done } = {}) {
   return http(`/api/tasks?${q.toString()}`);
 }
 
-/** REAL — POST /api/tasks { title, details, done } */
+/**
+ * REAL — POST /api/tasks { projectId, title, details, done, dueDate?, assigneeId? }
+ * assigneeId must be a member of the project, or the server answers 400.
+ */
 export async function createTask(body) {
   if (!USE_LIVE_API) {
     await wait(240);
@@ -99,7 +110,10 @@ export async function setDone(id, done, version) {
   });
 }
 
-/** REAL — PUT /api/tasks/{id} { title, details, done, version } */
+/**
+ * REAL — PUT /api/tasks/{id} { title, details, done, dueDate, assigneeId, version }
+ * Full replacement: omitting dueDate or assigneeId clears it.
+ */
 export async function updateTask(id, body) {
   if (!USE_LIVE_API) { await wait(200); return { ok: true }; }
   return http(`/api/tasks/${id}`, { method: 'PUT', body: JSON.stringify(body) });

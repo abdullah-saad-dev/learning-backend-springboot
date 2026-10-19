@@ -1,9 +1,9 @@
 -- DEVELOPMENT SEED. Repeatable, so Flyway re-runs it whenever this file's checksum
 -- changes, and it must therefore be safe to run twice.
 --
--- WARNING: this file lives in the default Flyway location, so it runs in EVERY
--- environment, production included - and it creates a login. Move it behind a
--- dev-only spring.flyway.locations before this is deployed anywhere real.
+-- This file lives in db/dev-migration, which only application-dev.properties adds to
+-- spring.flyway.locations. It creates logins with a committed password hash, so it must
+-- never be on the classpath scan of a production profile.
 --
 -- The account below leads the seeded projects. Its id is a literal rather than
 -- generated, so re-running this file adopts the same rows instead of orphaning them.
@@ -81,3 +81,30 @@ WHERE NOT EXISTS (
     WHERE t.title = v.title
       AND t.project_id = '01f114c3-1a40-7b21-9c55-2f6d0e83a413'
 );
+
+-- Deadlines and assignees (V12 / tasks_users). Both are applied as follow-up statements
+-- rather than in the inserts above so that a database seeded before V12 - whose tasks
+-- already exist and are skipped by the NOT EXISTS guards - gets them too. due_date is
+-- only filled where still NULL, so a date changed through the API is never overwritten.
+UPDATE tasks t
+SET due_date = v.due_date
+FROM (VALUES
+    ('01f114c3-1a40-7b21-9c55-2f6d0e83a411'::uuid, 'Add integration tests',      CURRENT_DATE + 3),
+    ('01f114c3-1a40-7b21-9c55-2f6d0e83a411'::uuid, 'Document the API',           CURRENT_DATE + 10),
+    ('01f114c3-1a40-7b21-9c55-2f6d0e83a413'::uuid, 'Conduct penetration test',   CURRENT_DATE + 5),
+    ('01f114c3-1a40-7b21-9c55-2f6d0e83a413'::uuid, 'Rotate cloud provider keys', CURRENT_DATE + 1)
+) AS v(project_id, title, due_date)
+WHERE t.project_id = v.project_id
+  AND t.title = v.title
+  AND t.due_date IS NULL;
+
+-- Each project's tasks go to a member of that project: an assignee outside the project
+-- would be able to see the task through the assignment but not the project it lives in.
+INSERT INTO tasks_users (task_id, user_id)
+SELECT t.id, v.user_id
+FROM (VALUES
+    ('01f114c3-1a40-7b21-9c55-2f6d0e83a411'::uuid, '01f114c2-5520-77a8-9226-cbfd1ea7e4b2'::uuid),
+    ('01f114c3-1a40-7b21-9c55-2f6d0e83a413'::uuid, '01f114c2-5520-77a8-9226-cbfd1ea7e4b3'::uuid)
+) AS v(project_id, user_id)
+JOIN tasks t ON t.project_id = v.project_id
+ON CONFLICT (task_id, user_id) DO NOTHING;

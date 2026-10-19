@@ -1,11 +1,14 @@
 package com.example.demo.tasks.service;
 
 import com.example.demo.auth.AppSecurityContext;
+import com.example.demo.auth.entity.User;
+import com.example.demo.auth.repository.UserRepository;
 import com.example.demo.project.Project;
 import com.example.demo.project.ProjectRepository;
 import com.example.demo.project.exceptions.ProjectNotFoundException;
 import com.example.demo.tasks.dtos.UpdateTaskRequest;
 import com.example.demo.tasks.entity.Task;
+import com.example.demo.tasks.exceptions.InvalidAssigneeException;
 import com.example.demo.tasks.exceptions.TaskConflictException;
 import com.example.demo.tasks.exceptions.TaskNotFoundException;
 import com.example.demo.tasks.repository.TaskRepository;
@@ -14,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -23,13 +27,15 @@ import java.util.UUID;
 public class TaskService {
     private final TaskRepository taskRepository;
     private final ProjectRepository projectRepository;
+    private final UserRepository userRepository;
     private final Clock clock;
     private final AppSecurityContext securityContext;
 
     public TaskService(TaskRepository taskRepository, ProjectRepository projectRepository,
-                       Clock clock, AppSecurityContext securityContext) {
+                       UserRepository userRepository, Clock clock, AppSecurityContext securityContext) {
         this.taskRepository = taskRepository;
         this.projectRepository = projectRepository;
+        this.userRepository = userRepository;
         this.clock = clock;
         this.securityContext = securityContext;
     }
@@ -39,18 +45,22 @@ public class TaskService {
     }
 
     @Transactional
-    public Task create(UUID projectId, String title, String details, boolean done) {
+    public Task create(UUID projectId, String title, String details, boolean done,
+                       LocalDate dueDate, UUID assigneeId) {
         UUID userId = securityContext.getCurrentUserId();
         Project project = projectRepository.findByIdAndUserId(projectId, userId)
                 .orElseThrow(() -> new ProjectNotFoundException("no project with id " + projectId));
 
-        return taskRepository.save(Task.builder()
+        Task task = Task.builder()
                 .project(project)
                 .title(title)
                 .details(details)
                 .createdAt(clock.instant())
                 .done(done)
-                .build());
+                .dueDate(dueDate)
+                .build();
+        task.setAssignee(resolveAssignee(projectId, assigneeId));
+        return taskRepository.save(task);
     }
 
     @Transactional
@@ -63,7 +73,24 @@ public class TaskService {
         task.setTitle(r.title());
         task.setDetails(r.details());
         task.setDone(r.done());
+        task.setDueDate(r.dueDate());
+        task.setAssignee(resolveAssignee(task.getProject().getId(), r.assigneeId()));
         return taskRepository.save(task);
+    }
+
+    /**
+     * null means unassigned. Otherwise the user must already belong to the project: checked
+     * here rather than trusted from the client, because assigning someone a task would
+     * otherwise let them read it without ever being let into the project.
+     */
+    private User resolveAssignee(UUID projectId, UUID assigneeId) {
+        if (assigneeId == null) {
+            return null;
+        }
+        if (!projectRepository.isMember(projectId, assigneeId)) {
+            throw new InvalidAssigneeException(assigneeId, projectId);
+        }
+        return userRepository.getReferenceById(assigneeId);
     }
 
     @Transactional
