@@ -33,7 +33,6 @@ public class TaskController {
                                       @RequestParam(name = "done", required = false) Boolean done) {
         return TaskResponse.of(service.search(title, done));
     }
-    // authentication.getName() returns the principle claim name which was set to sub in JwtConfig class
     @GetMapping("/{id}")
     public TaskResponse findById(@PathVariable("id") UUID id) {
         return TaskResponse.of(service.findById(id));
@@ -41,7 +40,7 @@ public class TaskController {
 
     @PostMapping
     public ResponseEntity<TaskResponse> create(@Valid @RequestBody CreateTaskRequest r) {
-        TaskResponse task = TaskResponse.of(service.create(r.title(), r.details(), r.done()));
+        TaskResponse task = TaskResponse.of(service.create(r.projectId(), r.title(), r.details(), r.done()));
         return ResponseEntity.created(createUri(task.id())).body(task);
     }
 
@@ -55,8 +54,7 @@ public class TaskController {
     @PatchMapping("/{id}/done")
     public ResponseEntity<TaskResponse> setDone(@PathVariable("id") UUID id,
                                                 @Valid @RequestBody SetDoneRequest r) {
-        UUID tempID = UUID.randomUUID();
-        Task patchedTask = service.setDone(id,tempID , r.done(), r.version());
+        Task patchedTask = service.setDone(id, r.done(), r.version());
         TaskResponse taskResponse = TaskResponse.of(patchedTask);
         return ResponseEntity.ok(taskResponse);
     }

@@ -14,12 +14,13 @@ import java.util.UUID;
  * "version" is the exception: it is deliberately published because a client cannot edit safely
  * without it. Read it here, send it back on the next PUT or PATCH.
  */
-public record TaskResponse(UUID id, String title, String details, Instant createdAt, boolean done,
+public record TaskResponse(UUID id, UUID projectId, String title, String details, Instant createdAt, boolean done,
                            long version) {
 
     public static TaskResponse of(Task task) {
-        return new TaskResponse(task.getId(), task.getTitle(), task.getDetails(),
-                task.getCreatedAt(),   task.isDone(), task.getVersion());
+        UUID projectId = task.getProject() != null ? task.getProject().getId() : null;
+        return new TaskResponse(task.getId(), projectId, task.getTitle(), task.getDetails(),
+                task.getCreatedAt(), task.isDone(), task.getVersion());
     }
 
     public static List<TaskResponse> of(List<Task> tasks) {
