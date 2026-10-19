@@ -24,13 +24,12 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @Slf4j
 public class ApiExceptionHandler {
 
-    // Client errors below are logged at DEBUG on purpose. Each one is a caller mistake the
-    // caller can already see in the response, and each is reachable by anyone at any rate, so
-    // a level that is on in production would let a stranger set the volume of your log.
-
     @ExceptionHandler(TaskNotFoundException.class)
     public ProblemDetail handle(TaskNotFoundException ex) {
-        log.debug("task not found: {}", ex.getMessage());
+        log.atDebug()
+                .setMessage("task not found")
+                .addKeyValue("error", ex.getMessage())
+                .log();
         return problem(HttpStatus.NOT_FOUND, "Task not found", ex.getMessage());
     }
 
@@ -39,7 +38,10 @@ public class ApiExceptionHandler {
      */
     @ExceptionHandler(TaskConflictException.class)
     public ProblemDetail handle(TaskConflictException ex) {
-        log.debug("stale write rejected: {}", ex.getMessage());
+        log.atDebug()
+                .setMessage("stale write rejected")
+                .addKeyValue("error", ex.getMessage())
+                .log();
         return problem(HttpStatus.CONFLICT, "Conflicting change", ex.getMessage());
     }
 
@@ -50,31 +52,35 @@ public class ApiExceptionHandler {
      */
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
     public ProblemDetail handle(ObjectOptimisticLockingFailureException ex) {
-        // Distinct message from the one above so the two layers stay tellable apart in the log:
-        // this is the narrower race the service's own version check cannot see.
-        log.debug("optimistic lock failed at flush: {}", ex.getMessage());
+        log.atDebug()
+                .setMessage("optimistic lock failed at flush")
+                .addKeyValue("error", ex.getMessage())
+                .log();
         return problem(HttpStatus.CONFLICT, "Conflicting change",
-                "The task changed while this request was in flight. Re-read it and retry.");
+                "The entity changed while this request was in flight. Re-read it and retry.");
     }
 
     @ExceptionHandler(AuthenticationException.class)
     public ProblemDetail handleAuthenticationException(AuthenticationException ex) {
-        // Type as well as message: this one handler covers a bad password and every refresh
-        // failure, and the class name is the only thing here that tells them apart. The
-        // interesting refresh cases already logged themselves in RefreshTokenService with the
-        // ids attached, so this line stays thin rather than repeating them.
-        log.debug("authentication rejected [{}]: {}", ex.getClass().getSimpleName(), ex.getMessage());
+        log.atDebug()
+                .setMessage("authentication rejected")
+                .addKeyValue("exception", ex.getClass().getSimpleName())
+                .addKeyValue("error", ex.getMessage())
+                .log();
         return problem(HttpStatus.UNAUTHORIZED, "Unauthorized", "Bad credentials, please try again later");
+    }
+
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ProblemDetail handleAccessDeniedException(org.springframework.security.access.AccessDeniedException ex) {
+        log.atDebug()
+                .setMessage("authorization rejected")
+                .addKeyValue("error", ex.getMessage())
+                .log();
+        return problem(HttpStatus.FORBIDDEN, "Forbidden", "You are not authorized to perform this operation");
     }
 
     @ExceptionHandler(DuplicateEmailsException.class)
     public ProblemDetail handle(DuplicateEmailsException ex) {
-        // INFO, not WARN: nobody is woken by someone re-using their own email, and signup is
-        // open to the world, so a WARN here is a stream anyone can turn on. Kept at INFO rather
-        // than DEBUG because repeated hits on distinct addresses is how account enumeration
-        // looks, and that is worth having on by default. The address is deliberate and is the
-        // only personal data logged anywhere - it is what makes that pattern visible, and it
-        // inherits whatever retention your log store has.
         log.atInfo()
                 .setMessage("signup rejected, email already registered")
                 .addKeyValue("email", ex.getEmail())
@@ -90,10 +96,6 @@ public class ApiExceptionHandler {
      * <p>
      * WARN rather than ERROR because a caller can still trigger it, so it must not page anyone;
      * WARN rather than DEBUG because it means a missing check, not a user mistake.
-     * <p>
-     * The detail sent to the client is generic on purpose. The exception message quotes the
-     * offending row - "Key (email)=(taken@example.com) already exists" - and echoing that back
-     * would hand an unauthenticated caller a way to test which values are present.
      */
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ProblemDetail handle(DataIntegrityViolationException ex) {
