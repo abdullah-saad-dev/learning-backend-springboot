@@ -10,31 +10,39 @@
 INSERT INTO users (id, username, email, password_hash, role, enabled)
 VALUES ('01f114c2-5520-77a8-9226-cbfd1ea7e4b2', 'Abdullah Saad',
         'abdullahsaad@gmail.com',
-        '$2a$12$m73wtVgdDN6KNF7m57W7DOYpSzeBQAa9b0K/.H0esHwB2YWydP71a',
-        'ADMIN', TRUE)
+        '$2a$12$SZy.77vRu0c7TRwTyely8uIpkFb5IBgYDDREENL74YjK7U4VbWO.q',
+        'ADMIN', TRUE),
+       ('01f114c2-5520-77a8-9226-cbfd1ea7e4b3', 'Alice Smith',
+        'alice@example.com',
+        '$2a$12$SZy.77vRu0c7TRwTyely8uIpkFb5IBgYDDREENL74YjK7U4VbWO.q',
+        'USER', TRUE)
 ON CONFLICT (id) DO NOTHING;
 
 -- Tasks belong to a project, not a user, so a project has to exist before any task
 -- can be seeded. Literal ids for the same reason the user has one: ON CONFLICT then
 -- makes a second run a no-op instead of appending another pair of projects. status,
 -- priority and version are left to their column defaults.
-INSERT INTO projects (id, name, description, status, priority, leader_id, start_date, due_date)
+INSERT INTO projects (id, name, description, status, priority, start_date, due_date)
 VALUES ('01f114c3-1a40-7b21-9c55-2f6d0e83a411', 'Task API',
         'The service these seeded tasks were written against',
-        'IN_PROGRESS', 'HIGH', '01f114c2-5520-77a8-9226-cbfd1ea7e4b2',
+        'IN_PROGRESS', 'HIGH',
         CURRENT_DATE - 7, CURRENT_DATE + 30),
        ('01f114c3-1a40-7b21-9c55-2f6d0e83a412', 'Personal',
         'Somewhere to put tasks that belong to no larger effort',
-        'PLANNED', 'LOW', '01f114c2-5520-77a8-9226-cbfd1ea7e4b2',
-        CURRENT_DATE, CURRENT_DATE + 90)
+        'PLANNED', 'LOW',
+        CURRENT_DATE, CURRENT_DATE + 90),
+       ('01f114c3-1a40-7b21-9c55-2f6d0e83a413', 'Secret Internal Audit',
+        'Confidential audit project that Abdullah Saad is not permitted to see',
+        'IN_PROGRESS', 'HIGH',
+        CURRENT_DATE - 5, CURRENT_DATE + 30)
 ON CONFLICT (id) DO NOTHING;
 
--- Leading a project does not make you a member of it - project_users is the only
--- table the access rules read - so the leader is inserted here as well.
-INSERT INTO projects_users (project_id, user_id)
-VALUES ('01f114c3-1a40-7b21-9c55-2f6d0e83a411', '01f114c2-5520-77a8-9226-cbfd1ea7e4b2'),
-       ('01f114c3-1a40-7b21-9c55-2f6d0e83a412', '01f114c2-5520-77a8-9226-cbfd1ea7e4b2')
-ON CONFLICT (project_id, user_id) DO NOTHING;
+-- Project membership and roles (MANAGER, MEMBER) are stored in the projects_users join table.
+INSERT INTO projects_users (project_id, user_id, role)
+VALUES ('01f114c3-1a40-7b21-9c55-2f6d0e83a411', '01f114c2-5520-77a8-9226-cbfd1ea7e4b2', 'MANAGER'),
+       ('01f114c3-1a40-7b21-9c55-2f6d0e83a412', '01f114c2-5520-77a8-9226-cbfd1ea7e4b2', 'MEMBER'),
+       ('01f114c3-1a40-7b21-9c55-2f6d0e83a413', '01f114c2-5520-77a8-9226-cbfd1ea7e4b3', 'MANAGER')
+ON CONFLICT (project_id, user_id) DO UPDATE SET role = EXCLUDED.role;
 
 -- id is left to the column default so re-seeding never collides with existing rows,
 -- and version to its DEFAULT 0 so seeded rows start where a freshly persisted one
@@ -55,6 +63,21 @@ WHERE NOT EXISTS (
     SELECT 1
     FROM tasks t
     JOIN projects p ON p.id = t.project_id
+    JOIN projects_users pu ON p.id = pu.project_id
     WHERE t.title = v.title
-      AND p.leader_id = '01f114c2-5520-77a8-9226-cbfd1ea7e4b2'
+      AND pu.user_id = '01f114c2-5520-77a8-9226-cbfd1ea7e4b2'
+);
+
+INSERT INTO tasks (title, details, created_at, done, project_id)
+SELECT v.title, v.details, v.created_at, v.done, '01f114c3-1a40-7b21-9c55-2f6d0e83a413'
+FROM (VALUES
+    ('Conduct penetration test',    'Test perimeter security and API defenses', NOW() - INTERVAL '2 days', FALSE),
+    ('Review SOC2 compliance',      'Verify access controls and data isolation', NOW() - INTERVAL '1 day',  TRUE),
+    ('Rotate cloud provider keys',  'Regenerate root credentials',               NOW(),                     FALSE)
+) AS v(title, details, created_at, done)
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM tasks t
+    WHERE t.title = v.title
+      AND t.project_id = '01f114c3-1a40-7b21-9c55-2f6d0e83a413'
 );
