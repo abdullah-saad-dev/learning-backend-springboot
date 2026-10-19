@@ -1,0 +1,18 @@
+/* ══════════════════════════════════════════════════════════════════
+   THE SPINE — the one signature device.
+   A single hairline that appears at the same offset on every screen.
+   Auth hangs the form off it; the app hangs project notches on it.
+   ══════════════════════════════════════════════════════════════ */
+.spine {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--line-hi) 8%,
+    var(--line-hi) 92%,
+    transparent
+  );
+  pointer-events: none;
+}

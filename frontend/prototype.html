@@ -1,0 +1,1853 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keel — design prototype</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+/* ══════════════════════════════════════════════════════════════════
+   TOKENS
+   Gold and blue are load-bearing: gold = you lead this project,
+   blue = you are a member. Neither is ever used decoratively.
+   ══════════════════════════════════════════════════════════════ */
+:root {
+  --void:      #07080A;
+  --panel:     #0D0F11;
+  --raised:    #131619;
+  --raised-hi: #191D21;
+  --line:      #1E2225;
+  --line-hi:   #2B3138;
+
+  --txt:       #EAECEF;
+  --txt-dim:   #9198A1;
+  --txt-mute:  #616872;
+
+  --gold:      #E0A93B;
+  --gold-deep: #6E5218;
+  --blue:      #4D8BF5;
+  --blue-deep: #223F6F;
+  --warn:      #E0603F;
+  --ok:        #4FA97B;
+
+  --display: 'Familjen Grotesk', 'Segoe UI', system-ui, sans-serif;
+  --sans:    'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+  --mono:    'IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace;
+
+  --rail: 248px;
+  --r-sm: 5px;
+  --r-md: 8px;
+  --ease: cubic-bezier(.22,.61,.36,1);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--void);
+  color: var(--txt);
+  font: 400 14px/1.5 var(--sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: none; padding: 0; }
+a { color: inherit; }
+
+:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+::selection { background: var(--gold-deep); color: #fff; }
+
+/* Utility ------------------------------------------------------- */
+.mono {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--txt-mute);
+}
+.sr {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+[hidden] { display: none !important; }
+
+/* ══════════════════════════════════════════════════════════════════
+   THE SPINE — the one signature device.
+   A single hairline that appears at the same offset on every screen.
+   Auth hangs the form off it; the app hangs project notches on it.
+   ══════════════════════════════════════════════════════════════ */
+.spine {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--line-hi) 8%,
+    var(--line-hi) 92%,
+    transparent
+  );
+  pointer-events: none;
+}
+/* ══════════════════════════════════════════════════════════════════
+   AUTH
+   ══════════════════════════════════════════════════════════════ */
+.auth {
+  min-height: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+}
+
+.auth-aside {
+  position: relative;
+  padding: 56px 56px 40px 96px;
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+}
+.auth-aside .spine { left: 56px; }
+
+.wordmark {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 19px;
+  letter-spacing: -.02em;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.wordmark i {
+  width: 3px; height: 15px;
+  background: var(--gold);
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.auth-pitch {
+  max-width: 32ch;
+  margin: 48px 0;
+}
+.auth-pitch h1 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: clamp(29px, 3.6vw, 41px);
+  line-height: 1.06;
+  letter-spacing: -.03em;
+  margin: 0 0 18px;
+}
+.auth-pitch p {
+  color: var(--txt-dim);
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.65;
+}
+
+/* The legend teaches the colour code before the user ever sees a project */
+.legend { display: grid; gap: 14px; margin-left: -40px; }
+.legend-row {
+  display: grid;
+  grid-template-columns: 3px auto;
+  gap: 14px;
+  align-items: center;
+}
+.legend-bar { width: 3px; height: 26px; border-radius: 2px; }
+.legend-row b {
+  display: block;
+  font-weight: 500;
+  font-size: 13px;
+  letter-spacing: -.01em;
+}
+.legend-row span { color: var(--txt-mute); font-size: 12.5px; }
+
+.auth-main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 32px;
+}
+.auth-card { width: 100%; max-width: 348px; }
+.auth-card h2 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 25px;
+  letter-spacing: -.02em;
+  margin: 0 0 6px;
+}
+.auth-card > p.sub {
+  color: var(--txt-mute);
+  margin: 0 0 30px;
+  font-size: 13.5px;
+}
+
+.field { margin-bottom: 15px; }
+.field label {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--txt-dim);
+}
+.field input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  transition: border-color .14s var(--ease), background .14s var(--ease);
+}
+.field input:hover { border-color: var(--line-hi); }
+.field input:focus {
+  border-color: var(--blue);
+  background: var(--raised);
+  outline: none;
+}
+.field input::placeholder { color: #4A5158; }
+.field .hint {
+  margin: 7px 0 0;
+  font-size: 12px;
+  color: var(--txt-mute);
+}
+.field.bad input { border-color: var(--warn); }
+.field .err {
+  margin: 7px 0 0;
+  font-size: 12px;
+  color: var(--warn);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 15px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  font-weight: 500;
+  font-size: 13.5px;
+  transition: background .14s var(--ease), border-color .14s var(--ease), color .14s var(--ease);
+}
+.btn-primary {
+  width: 100%;
+  background: var(--txt);
+  color: #08090A;
+  margin-top: 8px;
+}
+.btn-primary:hover { background: #fff; }
+.btn-primary:disabled { background: var(--raised-hi); color: var(--txt-mute); cursor: not-allowed; }
+.btn-ghost {
+  border-color: var(--line);
+  color: var(--txt-dim);
+  background: var(--panel);
+}
+.btn-ghost:hover { border-color: var(--line-hi); color: var(--txt); background: var(--raised); }
+.btn-danger {
+  border-color: var(--line);
+  color: var(--warn);
+  background: var(--panel);
+}
+.btn-danger:hover { border-color: var(--warn); background: rgba(224,96,63,.08); }
+
+.auth-swap {
+  margin-top: 26px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--txt-mute);
+}
+.auth-swap button {
+  color: var(--txt);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line-hi);
+}
+.auth-swap button:hover { text-decoration-color: var(--gold); }
+
+.banner {
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  font-size: 12.5px;
+  color: var(--txt-dim);
+  margin-bottom: 18px;
+}
+.banner.warn { border-color: rgba(224,96,63,.35); color: #F0A18B; background: rgba(224,96,63,.06); }
+
+/* ══════════════════════════════════════════════════════════════════
+   APP SHELL
+   ══════════════════════════════════════════════════════════════ */
+.shell {
+  height: 100%;
+  display: grid;
+  grid-template-columns: var(--rail) minmax(0, 1fr);
+}
+
+/* ── Rail ── */
+.rail {
+  position: relative;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.rail-head {
+  padding: 18px 16px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.kbd {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--txt-mute);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 3px 6px;
+  background: var(--void);
+}
+.rail-scroll { flex: 1; overflow-y: auto; padding-bottom: 12px; }
+.rail-spine { left: 16px; top: 58px; bottom: 62px; }
+
+.nav-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 16px;
+  color: var(--txt-dim);
+  font-size: 13.5px;
+  text-align: left;
+  transition: color .12s var(--ease), background .12s var(--ease);
+}
+.nav-item:hover { background: var(--raised); color: var(--txt); }
+.nav-item[aria-current="true"] { color: var(--txt); background: var(--raised); font-weight: 500; }
+.nav-item .count {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--txt-mute);
+}
+
+.group { margin-top: 22px; }
+.group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 16px 9px;
+}
+.group-head .mono { color: var(--txt-mute); }
+
+.plist { position: relative; }
+
+.prow {
+  position: relative;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 3px minmax(0, 1fr) auto;
+  gap: 13px;
+  align-items: center;
+  padding: 8px 16px 8px 15px;
+  text-align: left;
+  color: var(--txt-dim);
+  transition: background .12s var(--ease), color .12s var(--ease);
+}
+.prow:hover { background: var(--raised); color: var(--txt); }
+.prow[aria-current="true"] { background: var(--raised); color: var(--txt); }
+
+/* the notch: role, expressed on the spine itself */
+.notch {
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  transition: height .16s var(--ease), box-shadow .16s var(--ease);
+}
+.prow:hover .notch, .prow[aria-current="true"] .notch { height: 22px; }
+.notch.lead   { background: var(--gold); }
+.notch.member { background: var(--blue); }
+.prow:hover .notch.lead   { box-shadow: 0 0 9px rgba(224,169,59,.45); }
+.prow:hover .notch.member { box-shadow: 0 0 9px rgba(77,139,245,.45); }
+
+.pname {
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -.005em;
+}
+.pmeta {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .05em;
+  color: var(--txt-mute);
+  text-transform: uppercase;
+}
+.solo-tag {
+  border: 1px solid var(--gold-deep);
+  color: var(--gold);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .08em;
+}
+
+.rail-foot {
+  border-top: 1px solid var(--line);
+  padding: 10px;
+  position: relative;
+}
+.me {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: var(--r-sm);
+  text-align: left;
+  transition: background .12s var(--ease);
+}
+.me:hover { background: var(--raised); }
+.avatar {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--raised-hi);
+  border: 1px solid var(--line-hi);
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--gold);
+  flex: none;
+}
+.me-id { min-width: 0; }
+.me-id b { display: block; font-weight: 500; font-size: 13px; }
+.me-id span {
+  display: block;
+  font-size: 11.5px;
+  color: var(--txt-mute);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 10px; right: 10px;
+  background: var(--raised);
+  border: 1px solid var(--line-hi);
+  border-radius: var(--r-md);
+  padding: 5px;
+  box-shadow: 0 16px 40px rgba(0,0,0,.6);
+  z-index: 40;
+}
+.menu button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 9px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  color: var(--txt-dim);
+  text-align: left;
+}
+.menu button:hover { background: var(--raised-hi); color: var(--txt); }
+.menu button.danger:hover { color: var(--warn); }
+.menu hr { border: 0; border-top: 1px solid var(--line); margin: 5px 2px; }
+
+/* ── Main ── */
+.main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+
+.topbar {
+  border-bottom: 1px solid var(--line);
+  padding: 0 22px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 53px;
+  flex: none;
+}
+.topbar h1 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: -.015em;
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.topbar h1 .name {
+  flex: 1 1 auto;
+  min-width: 5ch;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.role-chip {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  white-space: nowrap;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .07em;
+  padding: 3px 7px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  color: var(--txt-mute);
+}
+.role-chip i { width: 3px; height: 10px; border-radius: 2px; }
+.role-chip.lead   { border-color: var(--gold-deep); color: var(--gold); }
+.role-chip.lead i { background: var(--gold); }
+.role-chip.member   { border-color: var(--blue-deep); color: var(--blue); }
+.role-chip.member i { background: var(--blue); }
+
+.segmented {
+  display: flex;
+  gap: 2px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 2px;
+}
+.segmented button {
+  padding: 5px 11px;
+  border-radius: 3px;
+  font-size: 12.5px;
+  color: var(--txt-mute);
+  transition: background .12s var(--ease), color .12s var(--ease);
+}
+.segmented button:hover { color: var(--txt-dim); }
+.segmented button[aria-pressed="true"] { background: var(--raised-hi); color: var(--txt); }
+
+.search {
+  margin-left: auto;
+  width: 190px;
+  padding: 7px 11px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  font-size: 13px;
+}
+.search:focus { border-color: var(--blue); outline: none; }
+.search::placeholder { color: #4A5158; }
+
+.board { flex: 1; display: grid; grid-template-columns: minmax(0,1fr) 0; min-height: 0; transition: grid-template-columns .2s var(--ease); }
+.board.with-panel { grid-template-columns: minmax(0,1fr) 336px; }
+
+.list { overflow-y: auto; padding: 8px 0 60px; }
+
+.trow {
+  display: grid;
+  grid-template-columns: 22px minmax(0,1fr) auto auto;
+  gap: 13px;
+  align-items: center;
+  width: 100%;
+  padding: 11px 22px;
+  border-bottom: 1px solid rgba(30,34,37,.55);
+  text-align: left;
+  transition: background .1s var(--ease);
+  animation: rise .34s var(--ease) both;
+}
+.trow:hover { background: var(--panel); }
+.trow[aria-current="true"] { background: var(--raised); }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.check {
+  width: 17px; height: 17px;
+  border: 1px solid var(--line-hi);
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+  transition: border-color .12s var(--ease), background .12s var(--ease);
+  flex: none;
+}
+.check:hover { border-color: var(--txt-dim); }
+.check[data-done="true"] { background: var(--ok); border-color: var(--ok); }
+.check svg { display: block; }
+
+.ttitle {
+  font-size: 13.5px;
+  letter-spacing: -.005em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.trow[data-done="true"] .ttitle { color: var(--txt-mute); text-decoration: line-through; text-decoration-color: var(--line-hi); }
+
+.tproject {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--txt-mute);
+  white-space: nowrap;
+}
+.tproject i { width: 3px; height: 12px; border-radius: 2px; flex: none; }
+.tproject i.lead   { background: var(--gold); }
+.tproject i.member { background: var(--blue); }
+
+.tdate { font-family: var(--mono); font-size: 11px; color: var(--txt-mute); white-space: nowrap; }
+.tdate.over { color: var(--warn); }
+
+.empty {
+  padding: 72px 22px;
+  text-align: center;
+  max-width: 40ch;
+  margin: 0 auto;
+}
+.empty h3 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 17px;
+  margin: 0 0 8px;
+  letter-spacing: -.015em;
+}
+.empty p { color: var(--txt-mute); margin: 0 0 20px; font-size: 13px; line-height: 1.6; }
+
+/* ── Inspector ── */
+.panel {
+  border-left: 1px solid var(--line);
+  background: var(--panel);
+  overflow-y: auto;
+  min-width: 0;
+  padding-bottom: 42px;
+}
+.panel-head {
+  padding: 16px 18px 14px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.panel-head h2 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 15.5px;
+  line-height: 1.35;
+  letter-spacing: -.015em;
+  margin: 0;
+}
+.panel-sec { padding: 15px 18px; border-bottom: 1px solid var(--line); }
+.panel-sec > .mono { display: block; margin-bottom: 10px; }
+.kv { display: grid; grid-template-columns: 84px minmax(0,1fr); gap: 9px 12px; font-size: 13px; }
+.kv dt { color: var(--txt-mute); font-size: 12.5px; }
+.kv dd { margin: 0; }
+
+.locked {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--void);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  color: var(--txt-dim);
+}
+.locked svg { flex: none; color: var(--gold); }
+.note {
+  margin: 9px 0 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--txt-mute);
+}
+
+/* A slot the backend has not filled yet. Deliberately visible, not fake. */
+.stub {
+  border: 1px dashed var(--line-hi);
+  border-radius: var(--r-md);
+  padding: 14px;
+  background: repeating-linear-gradient(
+    -45deg, transparent, transparent 7px,
+    rgba(255,255,255,.012) 7px, rgba(255,255,255,.012) 14px
+  );
+}
+.stub .mono { color: var(--txt-mute); display: block; margin-bottom: 7px; }
+.stub p { margin: 0; font-size: 12.5px; color: var(--txt-mute); line-height: 1.6; }
+.stub code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--blue);
+  background: rgba(77,139,245,.08);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+/* conflict strip — surfaces the optimistic-lock version the API publishes */
+.conflict {
+  border: 1px solid rgba(224,96,63,.4);
+  background: rgba(224,96,63,.07);
+  border-radius: var(--r-sm);
+  padding: 11px 12px;
+  margin: 0 0 14px;
+}
+.conflict b { display: block; font-size: 13px; font-weight: 500; color: #F0A18B; margin-bottom: 5px; }
+.conflict p { margin: 0 0 10px; font-size: 12px; color: var(--txt-dim); line-height: 1.55; }
+.conflict .row { display: flex; gap: 8px; }
+.conflict .btn { padding: 6px 11px; font-size: 12.5px; }
+
+/* ══════════════════════════════════════════════════════════════════
+   OVERLAYS
+   ══════════════════════════════════════════════════════════════ */
+.scrim {
+  position: fixed; inset: 0;
+  background: rgba(4,5,6,.72);
+  display: grid;
+  z-index: 60;
+  animation: fade .16s var(--ease) both;
+}
+.scrim.center { place-items: center; padding: 24px; }
+.scrim.top { place-items: start center; padding: 12vh 24px 24px; }
+@keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+
+.sheet {
+  width: 100%;
+  max-width: 460px;
+  background: var(--raised);
+  border: 1px solid var(--line-hi);
+  border-radius: 11px;
+  box-shadow: 0 28px 70px rgba(0,0,0,.66);
+  animation: pop .2s var(--ease) both;
+  overflow: hidden;
+}
+@keyframes pop { from { opacity: 0; transform: translateY(8px) scale(.985) } to { opacity: 1; transform: none } }
+
+.sheet-head { padding: 17px 18px 14px; border-bottom: 1px solid var(--line); }
+.sheet-head h2 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: -.015em;
+  margin: 0 0 5px;
+}
+.sheet-head p { margin: 0; font-size: 12.5px; color: var(--txt-mute); line-height: 1.55; }
+.sheet-body { padding: 14px 18px; max-height: 46vh; overflow-y: auto; }
+.sheet-foot {
+  padding: 13px 18px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 9px;
+  justify-content: flex-end;
+  background: var(--panel);
+}
+
+.session {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+.session:last-child { border-bottom: 0; }
+.session b { display: block; font-weight: 500; font-size: 13px; margin-bottom: 3px; }
+.session .mono { display: block; }
+.session .this {
+  display: inline-block;
+  margin-left: 7px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .07em;
+  color: var(--ok);
+  border: 1px solid rgba(79,169,123,.4);
+  border-radius: 3px;
+  padding: 1px 4px;
+  vertical-align: 1px;
+}
+.session button { font-size: 12.5px; color: var(--txt-mute); }
+.session button:hover { color: var(--warn); }
+
+/* command palette */
+.palette { width: 100%; max-width: 520px; }
+.palette input {
+  width: 100%;
+  padding: 15px 18px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 14.5px;
+}
+.palette input:focus { outline: none; }
+.palette input::placeholder { color: var(--txt-mute); }
+.palette ul { list-style: none; margin: 0; padding: 6px; max-height: 340px; overflow-y: auto; }
+.palette li button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 11px;
+  border-radius: var(--r-sm);
+  font-size: 13.5px;
+  color: var(--txt-dim);
+  text-align: left;
+}
+.palette li button:hover, .palette li button[data-active="true"] { background: var(--raised-hi); color: var(--txt); }
+.palette li i { width: 3px; height: 14px; border-radius: 2px; flex: none; background: var(--line-hi); }
+.palette li i.lead { background: var(--gold); }
+.palette li i.member { background: var(--blue); }
+.palette .cat { margin-left: auto; font-family: var(--mono); font-size: 10px; letter-spacing: .06em; color: var(--txt-mute); text-transform: uppercase; }
+.palette .none { padding: 26px 18px; text-align: center; color: var(--txt-mute); font-size: 13px; }
+
+/* toast */
+.toast {
+  position: fixed;
+  bottom: 20px; left: 50%;
+  transform: translateX(-50%);
+  background: var(--raised);
+  border: 1px solid var(--line-hi);
+  border-radius: var(--r-md);
+  padding: 10px 15px;
+  font-size: 13px;
+  box-shadow: 0 14px 36px rgba(0,0,0,.55);
+  z-index: 80;
+  animation: pop .2s var(--ease) both;
+}
+
+/* prototype ribbon */
+.ribbon {
+  position: fixed;
+  right: 0; bottom: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  border-top-left-radius: var(--r-md);
+  background: var(--panel);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--txt-mute);
+}
+.ribbon i { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); }
+
+/* ══════════════════════════════════════════════════════════════════
+   RESPONSIVE
+   ══════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .auth { grid-template-columns: 1fr; }
+  .auth-aside { padding: 34px 28px 30px 60px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .auth-aside .spine { left: 28px; }
+  .auth-pitch { margin: 28px 0; }
+  .board.with-panel { grid-template-columns: minmax(0,1fr); }
+  .board.with-panel .list { display: none; }
+  .panel { border-left: 0; }
+  .topbar { flex-wrap: wrap; height: auto; padding: 12px 22px; gap: 10px; }
+  .topbar h1 { flex: 1 1 100%; }
+  .search { margin-left: 0; flex: 1 1 auto; min-width: 0; }
+}
+@media (max-width: 720px) {
+  .shell { grid-template-columns: 1fr; grid-template-rows: auto minmax(0,1fr); }
+  .rail { border-right: 0; border-bottom: 1px solid var(--line); max-height: 43vh; }
+  .topbar { flex-wrap: wrap; height: auto; padding: 12px 16px; gap: 10px; }
+  .search { width: 100%; order: 3; }
+  .segmented { margin-left: 0; }
+  .trow { padding: 11px 16px; grid-template-columns: 22px minmax(0,1fr) auto; }
+  .trow .tproject { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<noscript>
+  <div style="padding:48px;font-family:system-ui;color:#EAECEF">
+    This prototype renders with JavaScript. Enable it to view the design.
+  </div>
+</noscript>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/htm@3.1.1/dist/htm.umd.js"></script>
+
+<script>
+(function () {
+  "use strict";
+
+  if (!window.React || !window.ReactDOM || !window.htm) {
+    document.getElementById('root').innerHTML =
+      '<div style="padding:48px;font-family:system-ui;color:#EAECEF;max-width:60ch">' +
+      '<h1 style="font-size:18px">Could not load React from the CDN.</h1>' +
+      '<p style="color:#9198A1;line-height:1.6">This prototype pulls React, ReactDOM and htm from ' +
+      'cdnjs and jsdelivr. Check the network connection, then reload.</p></div>';
+    return;
+  }
+
+  const { useState, useEffect, useMemo, useRef, useCallback } = React;
+  const html = htm.bind(React.createElement);
+
+  /* Change this in one place to rename the product. */
+  const PRODUCT = "Keel";
+
+  /* ════════════════════════════════════════════════════════════════
+     API — the single swap point.
+     ────────────────────────────────────────────────────────────────
+     USE_LIVE_API = false  →  every call resolves from FIXTURES below.
+     Flip it to true once the endpoints exist. Each REAL function
+     already carries the exact request it will make; each MOCK one
+     documents the endpoint it is waiting for and the shape it expects
+     back, so wiring it up is a one-function edit.
+     ════════════════════════════════════════════════════════════════ */
+  const USE_LIVE_API = false;
+  const BASE = "http://localhost:8080";
+
+  let accessToken = null;
+
+  async function http(path, options = {}) {
+    const res = await fetch(BASE + path, {
+      ...options,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: "Bearer " + accessToken } : {}),
+        ...(options.headers || {})
+      }
+    });
+    if (res.status === 409) throw Object.assign(new Error("conflict"), { conflict: true });
+    if (!res.ok) throw Object.assign(new Error("HTTP " + res.status), { status: res.status });
+    return res.status === 204 ? null : res.json();
+  }
+
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const clone = (v) => JSON.parse(JSON.stringify(v));
+
+  const API = {
+
+    /* ── REAL — POST /auth/login → { accessToken, issuedAt, expiresAt }
+           Also sets the HttpOnly refreshToken cookie. */
+    async login(email, password) {
+      if (!USE_LIVE_API) { await wait(420); return clone(FIXTURES.me); }
+      const jwt = await http("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password })
+      });
+      accessToken = jwt.accessToken;
+      return API.me();
+    },
+
+    /* ── REAL — POST /auth/signup → 200 with an empty body.
+           409 means the email is taken (DuplicateEmailsException). */
+    async signup(username, email, password) {
+      if (!USE_LIVE_API) { await wait(520); return clone(FIXTURES.me); }
+      await http("/auth/signup", {
+        method: "POST",
+        body: JSON.stringify({ username, email, password })
+      });
+      return API.login(email, password);
+    },
+
+    /* ── REAL — POST /auth/refresh, reads the cookie, returns a new JWT. */
+    async refresh() {
+      if (!USE_LIVE_API) return clone(FIXTURES.me);
+      const jwt = await http("/auth/refresh", { method: "POST" });
+      accessToken = jwt.accessToken;
+      return API.me();
+    },
+
+    /* ── MOCK — needs GET /auth/me
+           Expects: { id, username, email, role }
+           Today the username is only obtainable by decoding the JWT's
+           claims, which carry sub and role but no display name. */
+    async me() { await wait(120); return clone(FIXTURES.me); },
+
+    /* ── REAL — GET /api/tasks?title=&done=
+           Returns: [{ id, title, details, createdAt, done, version }]
+           Note: no projectId and no assignee on the response yet. */
+    async listTasks({ title, done } = {}) {
+      if (!USE_LIVE_API) { await wait(260); return clone(FIXTURES.tasks); }
+      const q = new URLSearchParams();
+      if (title) q.set("title", title);
+      if (done !== undefined && done !== null) q.set("done", String(done));
+      return http("/api/tasks?" + q.toString());
+    },
+
+    /* ── REAL — POST /api/tasks  { title, details, done } */
+    async createTask(body) {
+      if (!USE_LIVE_API) {
+        await wait(240);
+        return { id: crypto.randomUUID(), createdAt: new Date().toISOString(), version: 0, ...body };
+      }
+      return http("/api/tasks", { method: "POST", body: JSON.stringify(body) });
+    },
+
+    /* ── REAL — PATCH /api/tasks/{id}/done  { done, version }
+           Sending the version is what makes the 409 below possible. */
+    async setDone(id, done, version) {
+      if (!USE_LIVE_API) { await wait(180); return { ok: true }; }
+      return http("/api/tasks/" + id + "/done", {
+        method: "PATCH",
+        body: JSON.stringify({ done, version })
+      });
+    },
+
+    /* ── REAL — PUT /api/tasks/{id}  { title, details, done, version } */
+    async updateTask(id, body) {
+      if (!USE_LIVE_API) { await wait(200); return { ok: true }; }
+      return http("/api/tasks/" + id, { method: "PUT", body: JSON.stringify(body) });
+    },
+
+    /* ── REAL — DELETE /api/tasks/{id}?version= */
+    async deleteTask(id, version) {
+      if (!USE_LIVE_API) { await wait(180); return null; }
+      return http("/api/tasks/" + id + "?version=" + version, { method: "DELETE" });
+    },
+
+    /* ── MOCK — needs GET /api/projects
+           Expects: [{ id, name, role: 'LEADER'|'MEMBER', status, priority,
+                       memberCount, startDate, dueDate }]
+           role is derived server-side: LEADER when projects.leader_id = you,
+           MEMBER when you are only a row in projects_users. */
+    async listProjects() { await wait(300); return clone(FIXTURES.projects); },
+
+    /* ── MOCK — needs GET /api/projects/{id}/members
+           Expects: [{ id, username, email, role }]
+           memberCount === 1 is what drives the solo auto-assign rule. */
+    async listMembers(projectId) {
+      await wait(160);
+      return clone(FIXTURES.members[projectId] || []);
+    },
+
+    /* ── MOCK — needs GET /auth/sessions
+           Expects: [{ familyId, device, ip, lastSeenAt, current }]
+           Every row is one refresh-token family. The data already exists
+           in refresh_tokens; nothing exposes it. */
+    async listSessions() { await wait(240); return clone(FIXTURES.sessions); },
+
+    /* ── MOCK — needs POST /auth/logout
+           Revokes the family behind the current refresh cookie and clears
+           it with Max-Age=0. RefreshTokenRepository.revokeFamily already
+           does the revoking half. */
+    async logout() { await wait(200); return { ok: true }; },
+
+    /* ── MOCK — needs POST /auth/logout-all
+           Revokes every family belonging to the user, not just this one. */
+    async logoutEverywhere() { await wait(320); return { ok: true }; },
+
+    /* ── MOCK — needs GET /api/projects/{id}/activity
+           The audit_logs table (V8) exists and has these exact columns.
+           Expects: [{ id, action, entityType, entityId, actorId,
+                       changes, createdAt }] */
+    async listActivity() { await wait(200); return []; }
+  };
+
+  /* ════════════════════════════════════════════════════════════════
+     FIXTURES — delete this block once USE_LIVE_API is true.
+     ════════════════════════════════════════════════════════════════ */
+  const ME_ID = "01f114c2-5520-77a8-9226-cbfd1ea7e4b2";
+
+  const FIXTURES = {
+    me: {
+      id: ME_ID,
+      username: "Abdullah Saad",
+      email: "abdullahsaad@gmail.com",
+      role: "ADMIN"
+    },
+    projects: [
+      { id: "p1", name: "Task API",          role: "LEADER", status: "IN_PROGRESS", priority: "HIGH",   memberCount: 4, dueDate: "2026-10-07" },
+      { id: "p2", name: "Auth hardening",    role: "LEADER", status: "IN_PROGRESS", priority: "URGENT", memberCount: 1, dueDate: "2026-09-14" },
+      { id: "p3", name: "Schema evolution",  role: "LEADER", status: "PLANNED",     priority: "MEDIUM", memberCount: 1, dueDate: "2026-11-01" },
+      { id: "p4", name: "Capstone frontend", role: "MEMBER", status: "IN_PROGRESS", priority: "HIGH",   memberCount: 5, dueDate: "2026-09-30" },
+      { id: "p5", name: "React Flow labs",   role: "MEMBER", status: "BACKLOG",     priority: "LOW",    memberCount: 3, dueDate: "2026-12-12" }
+    ],
+    members: {
+      p1: [{ id: ME_ID, username: "Abdullah Saad" }, { id: "u2", username: "Mira" },
+           { id: "u3", username: "Tomas" }, { id: "u4", username: "Wei" }],
+      p2: [{ id: ME_ID, username: "Abdullah Saad" }],
+      p3: [{ id: ME_ID, username: "Abdullah Saad" }],
+      p4: [{ id: ME_ID, username: "Abdullah Saad" }, { id: "u5", username: "Priya" },
+           { id: "u6", username: "Jonas" }, { id: "u7", username: "Sam" }, { id: "u8", username: "Lena" }],
+      p5: [{ id: ME_ID, username: "Abdullah Saad" }, { id: "u9", username: "Dana" }, { id: "u10", username: "Kito" }]
+    },
+    tasks: [
+      { id: "t1", title: "Drop tasks.owner_id and re-point the service at projects_users",
+        details: "TaskService has 16 references left. The @Query is a string, so it fails at context load, not compile.",
+        projectId: "p1", assigneeId: ME_ID, done: false, version: 3, dueDate: "2026-09-10",
+        createdAt: "2026-09-06T09:12:00Z" },
+      { id: "t2", title: "Give ProjectStatus and ProjectPriority real constants",
+        details: "V6's CHECK constraints already fix the values. @Enumerated(STRING) writes name() verbatim, so they must match exactly.",
+        projectId: "p1", assigneeId: ME_ID, done: false, version: 0, dueDate: "2026-09-09",
+        createdAt: "2026-09-07T11:40:00Z" },
+      { id: "t3", title: "Settle the projects_users vs project_users name split",
+        details: "V6 creates projects_users; V7 and R__seed still insert into project_users. The chain fails on a fresh database.",
+        projectId: "p1", assigneeId: "u2", done: false, version: 1, dueDate: "2026-09-08",
+        createdAt: "2026-09-07T14:02:00Z" },
+      { id: "t4", title: "POST /auth/logout and /auth/logout-all",
+        details: "revokeFamily already exists and is exactly the operation. Nothing calls it outside reuse detection.",
+        projectId: "p2", assigneeId: ME_ID, done: false, version: 0, dueDate: "2026-09-12",
+        createdAt: "2026-09-05T08:20:00Z" },
+      { id: "t5", title: "RFC 7807 for filter-level 401s",
+        details: "Bearer-token failures never reach ApiExceptionHandler. The fix is exceptionHandling() on the chain.",
+        projectId: "p2", assigneeId: ME_ID, done: false, version: 2, dueDate: "2026-09-16",
+        createdAt: "2026-09-04T16:45:00Z" },
+      { id: "t6", title: "Pass APP_JWT_SECRET through docker-compose",
+        details: "JwtConfig fails startup without it and it is missing from example.env too.",
+        projectId: "p2", assigneeId: ME_ID, done: true, version: 1, dueDate: "2026-09-03",
+        createdAt: "2026-09-01T10:05:00Z" },
+      { id: "t7", title: "Write the expand/migrate/contract deck",
+        details: "V4 and V7 are two worked examples with a runnable database behind them.",
+        projectId: "p3", assigneeId: ME_ID, done: false, version: 0, dueDate: "2026-10-20",
+        createdAt: "2026-09-07T19:30:00Z" },
+      { id: "t8", title: "Move R__seed behind a dev-only flyway location",
+        details: "It runs in every environment and creates a real ADMIN login with a committed bcrypt hash.",
+        projectId: "p3", assigneeId: ME_ID, done: false, version: 0, dueDate: "2026-09-25",
+        createdAt: "2026-09-06T13:15:00Z" },
+      { id: "t9", title: "Wire the task list to GET /api/tasks",
+        details: "",
+        projectId: "p4", assigneeId: ME_ID, done: false, version: 0, dueDate: "2026-09-11",
+        createdAt: "2026-09-08T09:00:00Z" },
+      { id: "t10", title: "Review Priya's kanban drag interaction",
+        details: "",
+        projectId: "p4", assigneeId: "u5", done: false, version: 4, dueDate: "2026-09-13",
+        createdAt: "2026-09-07T15:22:00Z" },
+      { id: "t11", title: "Set up a CI workflow that only needs a Docker daemon",
+        details: "Several Spring contexts start more than one PostgreSQL container per run.",
+        projectId: "p4", assigneeId: ME_ID, done: true, version: 2, dueDate: "2026-09-02",
+        createdAt: "2026-08-30T12:00:00Z" },
+      { id: "t12", title: "Read the React Flow custom-node docs",
+        details: "",
+        projectId: "p5", assigneeId: "u9", done: false, version: 0, dueDate: "2026-11-30",
+        createdAt: "2026-09-05T20:10:00Z" }
+    ],
+    sessions: [
+      { familyId: "01f11a3c-8f21-7c04-9a11-4b7d2e6f0011", device: "Chrome on Windows", ip: "197.45.12.8",  lastSeenAt: "2026-09-09T08:41:00Z", current: true },
+      { familyId: "01f0f8d1-2c55-7bb9-8e30-9d1c7a4e5522", device: "Firefox on Windows", ip: "197.45.12.8",  lastSeenAt: "2026-09-07T21:03:00Z", current: false },
+      { familyId: "01f0e2a7-77b3-7d18-83c2-1e5f9b0c8833", device: "Safari on iPhone",   ip: "41.238.90.140", lastSeenAt: "2026-09-02T17:55:00Z", current: false }
+    ]
+  };
+
+  /* ════════════════════════════════════════════════════════════════
+     HELPERS
+     ════════════════════════════════════════════════════════════════ */
+  const TODAY = new Date("2026-09-09T00:00:00Z");
+
+  function fmtDate(iso) {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  }
+  function daysFrom(iso) {
+    if (!iso) return null;
+    return Math.round((new Date(iso) - TODAY) / 86400000);
+  }
+  function dueLabel(iso) {
+    const d = daysFrom(iso);
+    if (d === null) return "—";
+    if (d < 0)  return Math.abs(d) + "d over";
+    if (d === 0) return "today";
+    if (d === 1) return "tomorrow";
+    return fmtDate(iso);
+  }
+  const initials = (name) =>
+    (name || "?").split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+
+  const roleClass = (p) => (p && p.role === "LEADER" ? "lead" : "member");
+  const isSolo = (p) => !!p && p.memberCount === 1;
+
+  /* ════════════════════════════════════════════════════════════════
+     ICONS
+     ════════════════════════════════════════════════════════════════ */
+  const Icon = {
+    check: () => html`<svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <path d="M2.5 6.2l2.3 2.3L9.5 3.8" stroke="#07080A" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    lock: () => html`<svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <rect x="3" y="6.2" width="8" height="6" rx="1.4" stroke="currentColor" stroke-width="1.3"/>
+      <path d="M5 6.2V4.6a2 2 0 014 0v1.6" stroke="currentColor" stroke-width="1.3"/></svg>`,
+    inbox: () => html`<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M2 9.5h3l1 2h4l1-2h3M2 9.5L3.6 3.4A1 1 0 014.57 2.7h6.86a1 1 0 01.97.7L14 9.5v3a1 1 0 01-1 1H3a1 1 0 01-1-1v-3z"
+            stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/></svg>`
+  };
+
+  /* ════════════════════════════════════════════════════════════════
+     AUTH
+     ════════════════════════════════════════════════════════════════ */
+  function AuthScreen({ mode, onMode, onDone }) {
+    const signup = mode === "signup";
+    const [form, setForm] = useState({ username: "", email: "", password: "" });
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState(null);
+
+    const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+
+    async function submit(e) {
+      e.preventDefault();
+      setError(null);
+      setBusy(true);
+      try {
+        const me = signup
+          ? await API.signup(form.username, form.email, form.password)
+          : await API.login(form.email, form.password);
+        onDone(me);
+      } catch (err) {
+        setError(
+          err.status === 401 ? "That email and password do not match an account."
+          : err.status === 409 ? "An account already uses that email."
+          : "Could not reach the server. Check that it is running on " + BASE + "."
+        );
+        setBusy(false);
+      }
+    }
+
+    return html`
+      <div class="auth">
+        <aside class="auth-aside">
+          <div class="spine"></div>
+
+          <div class="wordmark"><i></i>${PRODUCT}</div>
+
+          <div class="auth-pitch">
+            <h1>You lead some of this. You are only along for the rest.</h1>
+            <p>
+              ${PRODUCT} keeps that distinction in front of you. Every project you touch
+              is marked by the authority you hold in it, on every screen.
+            </p>
+          </div>
+
+          <div class="legend">
+            <div class="legend-row">
+              <span class="legend-bar" style=${{ background: "var(--gold)" }}></span>
+              <span><b>You lead it</b><span>Yours to plan, assign and close.</span></span>
+            </div>
+            <div class="legend-row">
+              <span class="legend-bar" style=${{ background: "var(--blue)" }}></span>
+              <span><b>You are in it</b><span>Yours to contribute to.</span></span>
+            </div>
+          </div>
+        </aside>
+
+        <main class="auth-main">
+          <div class="auth-card">
+            <h2>${signup ? "Create your account" : "Sign in"}</h2>
+            <p class="sub">
+              ${signup ? "One account covers every project you lead or join."
+                       : "Welcome back."}
+            </p>
+
+            ${error && html`<div class="banner warn" role="alert">${error}</div>`}
+
+            <form onSubmit=${submit} noValidate>
+              ${signup && html`
+                <div class="field">
+                  <label for="username">Name</label>
+                  <input id="username" value=${form.username} onInput=${set("username")}
+                         autoComplete="name" placeholder="Abdullah Saad" required />
+                </div>`}
+
+              <div class="field">
+                <label for="email">Email</label>
+                <input id="email" type="email" value=${form.email} onInput=${set("email")}
+                       autoComplete="email" placeholder="you@example.com" required />
+              </div>
+
+              <div class="field">
+                <label for="password">Password</label>
+                <input id="password" type="password" value=${form.password} onInput=${set("password")}
+                       autoComplete=${signup ? "new-password" : "current-password"}
+                       placeholder="Your password" required />
+                ${signup && html`<p class="hint">
+                  The API accepts any non-blank password today. A length rule belongs here once it exists.
+                </p>`}
+              </div>
+
+              <button class="btn btn-primary" type="submit" disabled=${busy}>
+                ${busy ? (signup ? "Creating account…" : "Signing in…")
+                       : (signup ? "Create account" : "Sign in")}
+              </button>
+            </form>
+
+            <p class="auth-swap">
+              ${signup ? "Already have an account? " : "No account yet? "}
+              <button type="button" onClick=${() => onMode(signup ? "login" : "signup")}>
+                ${signup ? "Sign in" : "Create one"}
+              </button>
+            </p>
+          </div>
+        </main>
+      </div>`;
+  }
+
+  /* ════════════════════════════════════════════════════════════════
+     RAIL
+     ════════════════════════════════════════════════════════════════ */
+  function Rail({ me, projects, tasks, view, onView, onSessions, onLogout }) {
+    const [menu, setMenu] = useState(false);
+    const ref = useRef(null);
+
+    useEffect(() => {
+      if (!menu) return;
+      const away = (e) => { if (ref.current && !ref.current.contains(e.target)) setMenu(false); };
+      const esc = (e) => { if (e.key === "Escape") setMenu(false); };
+      document.addEventListener("mousedown", away);
+      document.addEventListener("keydown", esc);
+      return () => {
+        document.removeEventListener("mousedown", away);
+        document.removeEventListener("keydown", esc);
+      };
+    }, [menu]);
+
+    const led = projects.filter((p) => p.role === "LEADER");
+    const joined = projects.filter((p) => p.role !== "LEADER");
+    const openMine = tasks.filter((t) => t.assigneeId === me.id && !t.done).length;
+    const countFor = (p) => tasks.filter((t) => t.projectId === p.id && !t.done).length;
+
+    const Group = (label, list) => html`
+      <div class="group">
+        <div class="group-head">
+          <span class="mono">${label}</span>
+          <span class="mono">${list.length}</span>
+        </div>
+        <div class="plist">
+          ${list.map((p) => html`
+            <button class="prow" key=${p.id}
+                    aria-current=${view.type === "project" && view.id === p.id ? "true" : "false"}
+                    onClick=${() => onView({ type: "project", id: p.id })}>
+              <span class=${"notch " + roleClass(p)}></span>
+              <span class="pname">${p.name}</span>
+              <span class="pmeta">
+                ${isSolo(p) ? html`<span class="solo-tag">solo</span>` : countFor(p) || ""}
+              </span>
+            </button>`)}
+          ${list.length === 0 && html`
+            <p class="mono" style=${{ padding: "4px 16px 8px", textTransform: "none", letterSpacing: 0 }}>
+              Nothing here yet.
+            </p>`}
+        </div>
+      </div>`;
+
+    return html`
+      <nav class="rail" aria-label="Projects">
+        <div class="spine rail-spine" aria-hidden="true"></div>
+        <div class="rail-head">
+          <div class="wordmark"><i></i>${PRODUCT}</div>
+          <span class="kbd">⌘K</span>
+        </div>
+
+        <div class="rail-scroll">
+          <button class="nav-item" aria-current=${view.type === "mine" ? "true" : "false"}
+                  onClick=${() => onView({ type: "mine" })}>
+            ${Icon.inbox()} My tasks <span class="count">${openMine}</span>
+          </button>
+          <button class="nav-item" aria-current=${view.type === "all" ? "true" : "false"}
+                  onClick=${() => onView({ type: "all" })}>
+            ${Icon.inbox()} Everything <span class="count">${tasks.filter((t) => !t.done).length}</span>
+          </button>
+
+          ${Group("You lead", led)}
+          ${Group("You are in", joined)}
+        </div>
+
+        <div class="rail-foot" ref=${ref}>
+          ${menu && html`
+            <div class="menu" role="menu">
+              <button role="menuitem" onClick=${() => { setMenu(false); onSessions(); }}>
+                Active sessions
+              </button>
+              <hr />
+              <button role="menuitem" class="danger" onClick=${() => { setMenu(false); onLogout("this"); }}>
+                Log out of this device
+              </button>
+              <button role="menuitem" class="danger" onClick=${() => { setMenu(false); onLogout("all"); }}>
+                Log out of all devices
+              </button>
+            </div>`}
+
+          <button class="me" onClick=${() => setMenu(!menu)}
+                  aria-haspopup="menu" aria-expanded=${menu}>
+            <span class="avatar">${initials(me.username)}</span>
+            <span class="me-id">
+              <b>${me.username}</b>
+              <span>${me.email}</span>
+            </span>
+          </button>
+        </div>
+      </nav>`;
+  }
+
+  /* ════════════════════════════════════════════════════════════════
+     TASK LIST
+     ════════════════════════════════════════════════════════════════ */
+  function TaskRow({ task, project, selected, onSelect, onToggle }) {
+    const over = !task.done && daysFrom(task.dueDate) < 0;
+    return html`
+      <div class="trow" data-done=${String(task.done)}
+           aria-current=${selected ? "true" : "false"}
+           onClick=${() => onSelect(task)}
+           style=${{ animationDelay: (task._i || 0) * 14 + "ms" }}>
+        <button class="check" data-done=${String(task.done)}
+                aria-label=${(task.done ? "Reopen " : "Complete ") + task.title}
+                onClick=${(e) => { e.stopPropagation(); onToggle(task); }}>
+          ${task.done && Icon.check()}
+        </button>
+
+        <button class="ttitle" onClick=${() => onSelect(task)} style=${{ textAlign: "left" }}>
+          ${task.title}
+        </button>
+
+        <span class="tproject">
+          ${project && html`<i class=${roleClass(project)}></i>`}
+          ${project ? project.name : "No project"}
+        </span>
+
+        <span class=${"tdate" + (over ? " over" : "")}>${dueLabel(task.dueDate)}</span>
+      </div>`;
+  }
+
+  function TaskList({ tasks, projects, selected, onSelect, onToggle, emptyFor }) {
+    const byId = useMemo(
+      () => Object.fromEntries(projects.map((p) => [p.id, p])), [projects]);
+
+    if (tasks.length === 0) {
+      return html`
+        <div class="list">
+          <div class="empty">
+            <h3>${emptyFor.title}</h3>
+            <p>${emptyFor.body}</p>
+          </div>
+        </div>`;
+    }
+
+    return html`
+      <div class="list">
+        ${tasks.map((t, i) => html`
+          <${TaskRow} key=${t.id} task=${{ ...t, _i: i }} project=${byId[t.projectId]}
+                      selected=${selected && selected.id === t.id}
+                      onSelect=${onSelect} onToggle=${onToggle} />`)}
+      </div>`;
+  }
+
+  /* ════════════════════════════════════════════════════════════════
+     INSPECTOR
+     ════════════════════════════════════════════════════════════════ */
+  function Inspector({ task, project, conflict, onResolve, onClose }) {
+    const solo = isSolo(project);
+    return html`
+      <aside class="panel" aria-label="Task detail">
+        <div class="panel-head">
+          <h2>${task.title}</h2>
+          <button class="btn btn-ghost" style=${{ padding: "4px 9px", flex: "none" }}
+                  onClick=${onClose} aria-label="Close detail">✕</button>
+        </div>
+
+        ${conflict && html`
+          <div style=${{ padding: "14px 18px 0" }}>
+            <div class="conflict" role="alert">
+              <b>Someone else changed this task</b>
+              <p>
+                Your copy is version ${task.version}. The server has moved past it,
+                so this edit was refused rather than overwriting theirs.
+              </p>
+              <div class="row">
+                <button class="btn btn-ghost" onClick=${onResolve}>Load their version</button>
+              </div>
+            </div>
+          </div>`}
+
+        ${task.details && html`
+          <div class="panel-sec">
+            <span class="mono">Details</span>
+            <p style=${{ margin: 0, fontSize: "13px", lineHeight: 1.65, color: "var(--txt-dim)" }}>
+              ${task.details}
+            </p>
+          </div>`}
+
+        <div class="panel-sec">
+          <span class="mono">Assignee</span>
+          ${solo ? html`
+            <div class="locked">
+              ${Icon.lock()} You
+            </div>
+            <p class="note">
+              You are the only member of ${project.name}, so every task in it is yours
+              automatically. Add a second member to choose an assignee.
+            </p>`
+          : html`
+            <div class="stub">
+              <span class="mono">Waiting on the backend</span>
+              <p>
+                Choosing an assignee needs a person on the task. There is no
+                <code>assignee_id</code> column and no join between tasks and
+                <code>projects_users</code> yet.
+              </p>
+            </div>`}
+        </div>
+
+        <div class="panel-sec">
+          <span class="mono">Properties</span>
+          <dl class="kv">
+            <dt>Project</dt>
+            <dd>
+              ${project ? html`
+                <span class=${"role-chip " + roleClass(project)}>
+                  <i></i>${project.role === "LEADER" ? "You lead" : "Member"}
+                </span>
+                <span style=${{ marginLeft: "8px" }}>${project.name}</span>`
+              : "—"}
+            </dd>
+            <dt>Status</dt>
+            <dd>${task.done ? "Done" : "Open"}</dd>
+            <dt>Due</dt>
+            <dd class=${daysFrom(task.dueDate) < 0 && !task.done ? "tdate over" : ""}>
+              ${dueLabel(task.dueDate)}
+            </dd>
+            <dt>Created</dt>
+            <dd class="mono" style=${{ textTransform: "none" }}>${fmtDate(task.createdAt)}</dd>
+            <dt>Version</dt>
+            <dd class="mono" style=${{ textTransform: "none" }}>${task.version}</dd>
+          </dl>
+        </div>
+
+        <div class="panel-sec">
+          <span class="mono">Activity</span>
+          <div class="stub">
+            <span class="mono">Waiting on the backend</span>
+            <p>
+              The <code>audit_logs</code> table exists with the right columns and
+              nothing writes to it. When it does, every change lands here.
+            </p>
+          </div>
+        </div>
+      </aside>`;
+  }
+
+  /* ════════════════════════════════════════════════════════════════
+     SESSIONS
+     ════════════════════════════════════════════════════════════════ */
+  function SessionsSheet({ onClose, onLogoutAll, notify }) {
+    const [rows, setRows] = useState(null);
+    useEffect(() => { API.listSessions().then(setRows); }, []);
+
+    return html`
+      <div class="scrim center" onClick=${onClose}>
+        <div class="sheet" role="dialog" aria-modal="true" aria-label="Active sessions"
+             onClick=${(e) => e.stopPropagation()}>
+          <div class="sheet-head">
+            <h2>Active sessions</h2>
+            <p>
+              One row per refresh-token family. Signing out of a device revokes its
+              family; the access token it already holds expires within 15 minutes.
+            </p>
+          </div>
+
+          <div class="sheet-body">
+            ${rows === null
+              ? html`<p class="mono" style=${{ textTransform: "none", letterSpacing: 0 }}>Loading…</p>`
+              : rows.map((s) => html`
+                  <div class="session" key=${s.familyId}>
+                    <div>
+                      <b>${s.device}${s.current && html`<span class="this">this device</span>`}</b>
+                      <span class="mono" style=${{ textTransform: "none", letterSpacing: ".03em" }}>
+                        ${s.ip} · last used ${fmtDate(s.lastSeenAt)}
+                      </span>
+                    </div>
+                    <button onClick=${() => {
+                      setRows(rows.filter((r) => r.familyId !== s.familyId));
+                      notify("Signed out of " + s.device);
+                    }}>Log out</button>
+                  </div>`)}
+          </div>
+
+          <div class="sheet-foot">
+            <button class="btn btn-ghost" onClick=${onClose}>Close</button>
+            <button class="btn btn-danger" onClick=${onLogoutAll}>Log out of all devices</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function ConfirmSheet({ scope, onCancel, onConfirm }) {
+    const all = scope === "all";
+    return html`
+      <div class="scrim center" onClick=${onCancel}>
+        <div class="sheet" style=${{ maxWidth: "400px" }} role="dialog" aria-modal="true"
+             onClick=${(e) => e.stopPropagation()}>
+          <div class="sheet-head">
+            <h2>${all ? "Log out of all devices?" : "Log out of this device?"}</h2>
+            <p>
+              ${all
+                ? "Every session ends, including this one. Anything still holding an access token loses it within 15 minutes."
+                : "Only this browser is signed out. Your other devices stay signed in."}
+            </p>
+          </div>
+          <div class="sheet-foot">
+            <button class="btn btn-ghost" onClick=${onCancel}>Cancel</button>
+            <button class="btn btn-danger" onClick=${onConfirm}>
+              ${all ? "Log out everywhere" : "Log out"}
+            </button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  /* ════════════════════════════════════════════════════════════════
+     COMMAND PALETTE
+     ════════════════════════════════════════════════════════════════ */
+  function Palette({ projects, onClose, onView, onSessions, onLogout }) {
+    const [q, setQ] = useState("");
+    const [i, setI] = useState(0);
+    const input = useRef(null);
+
+    useEffect(() => { input.current && input.current.focus(); }, []);
+
+    const items = useMemo(() => {
+      const base = [
+        { key: "mine", label: "My tasks", cat: "Go", run: () => onView({ type: "mine" }) },
+        { key: "all",  label: "Everything", cat: "Go", run: () => onView({ type: "all" }) },
+        ...projects.map((p) => ({
+          key: p.id, label: p.name, cat: p.role === "LEADER" ? "Lead" : "Member",
+          role: roleClass(p), run: () => onView({ type: "project", id: p.id })
+        })),
+        { key: "sessions", label: "Active sessions", cat: "Account", run: onSessions },
+        { key: "out",  label: "Log out of this device", cat: "Account", run: () => onLogout("this") },
+        { key: "outall", label: "Log out of all devices", cat: "Account", run: () => onLogout("all") }
+      ];
+      const needle = q.trim().toLowerCase();
+      return needle ? base.filter((x) => x.label.toLowerCase().includes(needle)) : base;
+    }, [q, projects]);
+
+    useEffect(() => { setI(0); }, [q]);
+
+    function keys(e) {
+      if (e.key === "ArrowDown") { e.preventDefault(); setI((n) => Math.min(n + 1, items.length - 1)); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); setI((n) => Math.max(n - 1, 0)); }
+      else if (e.key === "Enter" && items[i]) { e.preventDefault(); items[i].run(); onClose(); }
+      else if (e.key === "Escape") { onClose(); }
+    }
+
+    return html`
+      <div class="scrim top" onClick=${onClose}>
+        <div class="sheet palette" role="dialog" aria-modal="true" aria-label="Command palette"
+             onClick=${(e) => e.stopPropagation()}>
+          <input ref=${input} value=${q} placeholder="Jump to a project or run a command…"
+                 onInput=${(e) => setQ(e.target.value)} onKeyDown=${keys}
+                 aria-label="Command" />
+          ${items.length === 0
+            ? html`<p class="none">Nothing matches “${q}”.</p>`
+            : html`<ul>
+                ${items.map((x, n) => html`
+                  <li key=${x.key}>
+                    <button data-active=${n === i ? "true" : "false"}
+                            onMouseEnter=${() => setI(n)}
+                            onClick=${() => { x.run(); onClose(); }}>
+                      <i class=${x.role || ""}></i>
+                      ${x.label}
+                      <span class="cat">${x.cat}</span>
+                    </button>
+                  </li>`)}
+              </ul>`}
+        </div>
+      </div>`;
+  }
+
+  /* ════════════════════════════════════════════════════════════════
+     APP
+     ════════════════════════════════════════════════════════════════ */
+  function App() {
+    const [me, setMe] = useState(null);
+    const [mode, setMode] = useState("login");
+
+    const [projects, setProjects] = useState([]);
+    const [tasks, setTasks] = useState([]);
+    const [view, setView] = useState({ type: "mine" });
+    const [filter, setFilter] = useState("open");
+    const [query, setQuery] = useState("");
+    const [selected, setSelected] = useState(null);
+    const [conflictOn, setConflictOn] = useState(null);
+
+    const [palette, setPalette] = useState(false);
+    const [sessions, setSessions] = useState(false);
+    const [confirm, setConfirm] = useState(null);
+    const [toast, setToast] = useState(null);
+
+    const notify = useCallback((msg) => {
+      setToast(msg);
+      setTimeout(() => setToast(null), 2600);
+    }, []);
+
+    useEffect(() => {
+      if (!me) return;
+      Promise.all([API.listProjects(), API.listTasks()])
+        .then(([p, t]) => { setProjects(p); setTasks(t); });
+    }, [me]);
+
+    useEffect(() => {
+      if (!me) return;
+      const onKey = (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+          e.preventDefault();
+          setPalette((v) => !v);
+        }
+      };
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }, [me]);
+
+    const projectsById = useMemo(
+      () => Object.fromEntries(projects.map((p) => [p.id, p])), [projects]);
+
+    const activeProject = view.type === "project" ? projectsById[view.id] : null;
+
+    const visible = useMemo(() => {
+      let list = tasks;
+      if (view.type === "mine") list = list.filter((t) => t.assigneeId === me.id);
+      if (view.type === "project") list = list.filter((t) => t.projectId === view.id);
+      if (filter === "open") list = list.filter((t) => !t.done);
+      if (filter === "done") list = list.filter((t) => t.done);
+      const needle = query.trim().toLowerCase();
+      if (needle) list = list.filter((t) => t.title.toLowerCase().includes(needle));
+      return list;
+    }, [tasks, view, filter, query, me]);
+
+    /* Optimistic toggle. The version goes with the request; a 409 means the
+       row moved underneath us, and the conflict strip explains that rather
+       than silently discarding the edit. */
+    async function toggle(task) {
+      setTasks((all) => all.map((t) => (t.id === task.id ? { ...t, done: !t.done } : t)));
+      try {
+        await API.setDone(task.id, !task.done, task.version);
+      } catch (err) {
+        setTasks((all) => all.map((t) => (t.id === task.id ? { ...t, done: task.done } : t)));
+        if (err.conflict) { setSelected(task); setConflictOn(task.id); }
+        else notify("Could not save that change.");
+      }
+    }
+
+    async function doLogout(scope) {
+      setConfirm(null);
+      setSessions(false);
+      if (scope === "all") await API.logoutEverywhere();
+      else await API.logout();
+      setMe(null);
+      setMode("login");
+      setProjects([]); setTasks([]); setSelected(null);
+      setView({ type: "mine" });
+    }
+
+    if (!me) {
+      return html`<${AuthScreen} mode=${mode} onMode=${setMode} onDone=${setMe} />`;
+    }
+
+    const heading =
+      view.type === "mine" ? "My tasks"
+      : view.type === "all" ? "Everything"
+      : activeProject ? activeProject.name : "Project";
+
+    const emptyFor =
+      query ? { title: "No task matches that search",
+                body: "Try a shorter word, or clear the search to see the whole list." }
+      : filter === "done" ? { title: "Nothing finished here yet",
+                body: "Completed tasks collect here as you close them." }
+      : view.type === "mine" ? { title: "No open tasks assigned to you",
+                body: "Tasks you are assigned across every project land here." }
+      : { title: "No open tasks", body: "Nothing in this project is waiting on anyone." };
+
+    return html`
+      <div class="shell">
+        <${Rail} me=${me} projects=${projects} tasks=${tasks} view=${view}
+                 onView=${(v) => { setView(v); setSelected(null); }}
+                 onSessions=${() => setSessions(true)}
+                 onLogout=${(scope) => setConfirm(scope)} />
+
+        <main class="main">
+          <header class="topbar">
+            <h1>
+              <span class="name">${heading}</span>
+              ${activeProject && html`
+                <span class=${"role-chip " + roleClass(activeProject)}>
+                  <i></i>${activeProject.role === "LEADER" ? "You lead" : "Member"}
+                </span>`}
+              ${activeProject && isSolo(activeProject) && html`
+                <span class="role-chip" title="You are the only member, so tasks here are assigned to you">
+                  Solo project
+                </span>`}
+            </h1>
+
+            <input class="search" value=${query} placeholder="Search titles…"
+                   onInput=${(e) => setQuery(e.target.value)} aria-label="Search tasks" />
+
+            <div class="segmented" role="group" aria-label="Filter">
+              ${[["open", "Open"], ["done", "Done"], ["all", "All"]].map(([k, label]) => html`
+                <button key=${k} aria-pressed=${filter === k ? "true" : "false"}
+                        onClick=${() => setFilter(k)}>${label}</button>`)}
+            </div>
+          </header>
+
+          <div class=${"board" + (selected ? " with-panel" : "")}>
+            <${TaskList} tasks=${visible} projects=${projects} selected=${selected}
+                         onSelect=${(t) => { setSelected(t); setConflictOn(null); }}
+                         onToggle=${toggle} emptyFor=${emptyFor} />
+            ${selected && html`
+              <${Inspector} task=${selected} project=${projectsById[selected.projectId]}
+                            conflict=${conflictOn === selected.id}
+                            onResolve=${() => { setConflictOn(null); notify("Reloaded from the server."); }}
+                            onClose=${() => { setSelected(null); setConflictOn(null); }} />`}
+          </div>
+        </main>
+
+        ${palette && html`
+          <${Palette} projects=${projects} onClose=${() => setPalette(false)}
+                      onView=${(v) => { setView(v); setSelected(null); }}
+                      onSessions=${() => setSessions(true)}
+                      onLogout=${(s) => setConfirm(s)} />`}
+
+        ${sessions && html`
+          <${SessionsSheet} onClose=${() => setSessions(false)}
+                            onLogoutAll=${() => setConfirm("all")} notify=${notify} />`}
+
+        ${confirm && html`
+          <${ConfirmSheet} scope=${confirm} onCancel=${() => setConfirm(null)}
+                           onConfirm=${() => doLogout(confirm)} />`}
+
+        ${toast && html`<div class="toast" role="status">${toast}</div>`}
+
+        <div class="ribbon"><i></i>Design prototype · mock data</div>
+      </div>`;
+  }
+
+  ReactDOM.createRoot(document.getElementById("root")).render(html`<${App} />`);
+})();
+</script>
+</body>
+</html>

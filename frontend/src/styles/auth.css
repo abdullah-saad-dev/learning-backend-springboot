@@ -1,0 +1,195 @@
+/* ══════════════════════════════════════════════════════════════════
+   AUTH
+   ══════════════════════════════════════════════════════════════ */
+.auth {
+  min-height: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+}
+
+.auth-aside {
+  position: relative;
+  padding: 56px 56px 40px 96px;
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+}
+.auth-aside .spine { left: 56px; }
+
+.wordmark {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 19px;
+  letter-spacing: -.02em;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.wordmark i {
+  width: 3px; height: 15px;
+  background: var(--gold);
+  border-radius: 2px;
+  display: inline-block;
+}
+
+/* Two measures, not one: `ch` resolves against this element's own 14px font,
+   so a single max-width gave the 41px headline a 269px column and broke it
+   every three words. The headline gets a width in px; the body keeps a ch
+   measure, which is what ch is actually good for. */
+.auth-pitch {
+  max-width: 470px;
+  margin: 44px 0;
+}
+.auth-pitch p {
+  max-width: 36ch;
+}
+.auth-pitch h1 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: clamp(29px, 3.6vw, 41px);
+  line-height: 1.06;
+  letter-spacing: -.03em;
+  margin: 0 0 18px;
+}
+.auth-pitch p {
+  color: var(--txt-dim);
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.65;
+}
+
+/* The legend teaches the colour code before the user ever sees a project */
+.legend { display: grid; gap: 14px; margin-left: -40px; }
+.legend-row {
+  display: grid;
+  grid-template-columns: 3px auto;
+  gap: 14px;
+  align-items: center;
+}
+.legend-bar { width: 3px; height: 26px; border-radius: 2px; }
+.legend-row b {
+  display: block;
+  font-weight: 500;
+  font-size: 13px;
+  letter-spacing: -.01em;
+}
+.legend-row span { color: var(--txt-mute); font-size: 12.5px; }
+
+.auth-main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 32px;
+}
+.auth-card { width: 100%; max-width: 348px; }
+.auth-card h2 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 25px;
+  letter-spacing: -.02em;
+  margin: 0 0 6px;
+}
+.auth-card > p.sub {
+  color: var(--txt-mute);
+  margin: 0 0 30px;
+  font-size: 13.5px;
+}
+
+.field { margin-bottom: 15px; }
+.field label {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--txt-dim);
+}
+.field input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  transition: border-color .14s var(--ease), background .14s var(--ease);
+}
+.field input:hover { border-color: var(--line-hi); }
+.field input:focus {
+  border-color: var(--blue);
+  background: var(--raised);
+  outline: none;
+}
+.field input::placeholder { color: #4A5158; }
+.field .hint {
+  margin: 7px 0 0;
+  font-size: 12px;
+  color: var(--txt-mute);
+}
+.field.bad input { border-color: var(--warn); }
+.field .err {
+  margin: 7px 0 0;
+  font-size: 12px;
+  color: var(--warn);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 15px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  font-weight: 500;
+  font-size: 13.5px;
+  transition: background .14s var(--ease), border-color .14s var(--ease), color .14s var(--ease);
+}
+.btn-primary {
+  width: 100%;
+  background: var(--txt);
+  color: #08090A;
+  margin-top: 8px;
+}
+.btn-primary:hover { background: #fff; }
+.btn-primary:disabled { background: var(--raised-hi); color: var(--txt-mute); cursor: not-allowed; }
+.btn-ghost {
+  border-color: var(--line);
+  color: var(--txt-dim);
+  background: var(--panel);
+}
+.btn-ghost:hover { border-color: var(--line-hi); color: var(--txt); background: var(--raised); }
+.btn-danger {
+  border-color: var(--line);
+  color: var(--warn);
+  background: var(--panel);
+}
+.btn-danger:hover { border-color: var(--warn); background: rgba(224,96,63,.08); }
+
+.auth-swap {
+  margin-top: 26px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--txt-mute);
+}
+.auth-swap button {
+  color: var(--txt);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line-hi);
+}
+.auth-swap button:hover { text-decoration-color: var(--gold); }
+
+.banner {
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  font-size: 12.5px;
+  color: var(--txt-dim);
+  margin-bottom: 18px;
+}
+.banner.warn { border-color: rgba(224,96,63,.35); color: #F0A18B; background: rgba(224,96,63,.06); }

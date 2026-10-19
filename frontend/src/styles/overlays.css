@@ -1,0 +1,137 @@
+/* ══════════════════════════════════════════════════════════════════
+   OVERLAYS
+   ══════════════════════════════════════════════════════════════ */
+.scrim {
+  position: fixed; inset: 0;
+  background: rgba(4,5,6,.72);
+  display: grid;
+  z-index: 60;
+  animation: fade .16s var(--ease) both;
+}
+.scrim.center { place-items: center; padding: 24px; }
+.scrim.top { place-items: start center; padding: 12vh 24px 24px; }
+@keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+
+.sheet {
+  width: 100%;
+  max-width: 460px;
+  background: var(--raised);
+  border: 1px solid var(--line-hi);
+  border-radius: 11px;
+  box-shadow: 0 28px 70px rgba(0,0,0,.66);
+  animation: pop .2s var(--ease) both;
+  overflow: hidden;
+}
+@keyframes pop { from { opacity: 0; transform: translateY(8px) scale(.985) } to { opacity: 1; transform: none } }
+
+.sheet-head { padding: 17px 18px 14px; border-bottom: 1px solid var(--line); }
+.sheet-head h2 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: -.015em;
+  margin: 0 0 5px;
+}
+.sheet-head p { margin: 0; font-size: 12.5px; color: var(--txt-mute); line-height: 1.55; }
+.sheet-body { padding: 14px 18px; max-height: 46vh; overflow-y: auto; }
+.sheet-foot {
+  padding: 13px 18px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 9px;
+  justify-content: flex-end;
+  background: var(--panel);
+}
+
+.session {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+.session:last-child { border-bottom: 0; }
+.session b { display: block; font-weight: 500; font-size: 13px; margin-bottom: 3px; }
+.session .mono { display: block; }
+.session .this {
+  display: inline-block;
+  margin-left: 7px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: .07em;
+  color: var(--ok);
+  border: 1px solid rgba(79,169,123,.4);
+  border-radius: 3px;
+  padding: 1px 4px;
+  vertical-align: 1px;
+}
+.session button { font-size: 12.5px; color: var(--txt-mute); }
+.session button:hover { color: var(--warn); }
+
+/* command palette */
+.palette { width: 100%; max-width: 520px; }
+.palette input {
+  width: 100%;
+  padding: 15px 18px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 14.5px;
+}
+.palette input:focus { outline: none; }
+.palette input::placeholder { color: var(--txt-mute); }
+.palette ul { list-style: none; margin: 0; padding: 6px; max-height: 340px; overflow-y: auto; }
+.palette li button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 11px;
+  border-radius: var(--r-sm);
+  font-size: 13.5px;
+  color: var(--txt-dim);
+  text-align: left;
+}
+.palette li button:hover, .palette li button[data-active="true"] { background: var(--raised-hi); color: var(--txt); }
+.palette li i { width: 3px; height: 14px; border-radius: 2px; flex: none; background: var(--line-hi); }
+.palette li i.lead { background: var(--gold); }
+.palette li i.member { background: var(--blue); }
+.palette .cat { margin-left: auto; font-family: var(--mono); font-size: 10px; letter-spacing: .06em; color: var(--txt-mute); text-transform: uppercase; }
+.palette .none { padding: 26px 18px; text-align: center; color: var(--txt-mute); font-size: 13px; }
+
+/* toast */
+.toast {
+  position: fixed;
+  bottom: 20px; left: 50%;
+  transform: translateX(-50%);
+  background: var(--raised);
+  border: 1px solid var(--line-hi);
+  border-radius: var(--r-md);
+  padding: 10px 15px;
+  font-size: 13px;
+  box-shadow: 0 14px 36px rgba(0,0,0,.55);
+  z-index: 80;
+  animation: pop .2s var(--ease) both;
+}
+
+/* prototype ribbon */
+.ribbon {
+  position: fixed;
+  right: 0; bottom: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  border-top-left-radius: var(--r-md);
+  background: var(--panel);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--txt-mute);
+}
+.ribbon i { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); }
