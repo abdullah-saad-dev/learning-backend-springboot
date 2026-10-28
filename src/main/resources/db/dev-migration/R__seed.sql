@@ -82,10 +82,10 @@ WHERE NOT EXISTS (
       AND t.project_id = '01f114c3-1a40-7b21-9c55-2f6d0e83a413'
 );
 
--- Deadlines and assignees (V12 / tasks_users). Both are applied as follow-up statements
--- rather than in the inserts above so that a database seeded before V12 - whose tasks
--- already exist and are skipped by the NOT EXISTS guards - gets them too. due_date is
--- only filled where still NULL, so a date changed through the API is never overwritten.
+-- Deadlines and assignees (V12). Both are applied as follow-up statements rather than in
+-- the inserts above so that a database seeded before V12 - whose tasks already exist and
+-- are skipped by the NOT EXISTS guards - gets them too. Only filled where still NULL, so
+-- values changed through the API are never overwritten.
 UPDATE tasks t
 SET due_date = v.due_date
 FROM (VALUES
@@ -100,11 +100,11 @@ WHERE t.project_id = v.project_id
 
 -- Each project's tasks go to a member of that project: an assignee outside the project
 -- would be able to see the task through the assignment but not the project it lives in.
-INSERT INTO tasks_users (task_id, user_id)
-SELECT t.id, v.user_id
+UPDATE tasks t
+SET assignee_id = v.user_id
 FROM (VALUES
     ('01f114c3-1a40-7b21-9c55-2f6d0e83a411'::uuid, '01f114c2-5520-77a8-9226-cbfd1ea7e4b2'::uuid),
     ('01f114c3-1a40-7b21-9c55-2f6d0e83a413'::uuid, '01f114c2-5520-77a8-9226-cbfd1ea7e4b3'::uuid)
 ) AS v(project_id, user_id)
-JOIN tasks t ON t.project_id = v.project_id
-ON CONFLICT (task_id, user_id) DO NOTHING;
+WHERE t.project_id = v.project_id
+  AND t.assignee_id IS NULL;
