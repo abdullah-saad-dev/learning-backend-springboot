@@ -1,6 +1,7 @@
 package com.example.demo.project;
 
 import com.example.demo.auth.AppSecurityContext;
+import com.example.demo.project.exceptions.ProjectNotFoundException;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
@@ -17,11 +18,11 @@ public class ProjectSecurity {
 
     public boolean isManager(UUID projectId) {
         if (projectId == null) {
-            return false;
+            throw new ProjectNotFoundException("no project with id null");
         }
         UUID currentUserId = securityContext.getCurrentUserId();
-        if (currentUserId == null) {
-            return false;
+        if (currentUserId == null || !projectRepository.isMember(projectId, currentUserId)) {
+            throw new ProjectNotFoundException("no project with id " + projectId);
         }
         return projectRepository.isManager(projectId, currentUserId);
     }

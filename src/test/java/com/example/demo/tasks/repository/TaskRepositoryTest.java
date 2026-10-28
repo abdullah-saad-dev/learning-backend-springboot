@@ -1,6 +1,7 @@
 package com.example.demo.tasks.repository;
 
 import com.example.demo.PostgresTestContainer;
+import com.example.demo.project.Project;
 import com.example.demo.tasks.entity.Task;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,8 +31,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>
  * Spring Data supplies save/findById/delete, so those are not re-tested for their own sake.
  * What is asserted here is what this project relies on and derivation does not guarantee: the
- * ordering and case rules on search, its null-means-no-filter contract, the owner predicate that
- * is deliberately NOT optional, the version bump, and the optimistic-lock failure.
+ * ordering and case rules on search, its null-means-no-filter contract, the project membership
+ * predicate that is deliberately NOT optional, the version bump, and the optimistic-lock failure.
  * Turning an absent task into a 404 is not the store's job - it belongs to TaskService and is
  * covered by TaskApiTest.
  */
@@ -41,6 +42,8 @@ class TaskRepositoryTest {
 
     private static final UUID ALICE = UUID.fromString("01f11400-0000-7000-8000-00000000a11c");
     private static final UUID BOB = UUID.fromString("01f11400-0000-7000-8000-00000000b0b0");
+    private static final UUID ALICE_PROJECT = UUID.fromString("01f11400-0000-7000-8000-00000000a11d");
+    private static final UUID BOB_PROJECT = UUID.fromString("01f11400-0000-7000-8000-00000000b0b1");
 
     @Autowired
     private TaskRepository repository;
@@ -59,11 +62,13 @@ class TaskRepositoryTest {
         // A genuinely separate transaction, so a test can commit a competing write in the
         // middle of another one without needing a second thread.
         newTx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-        // tasks.owner_id is a foreign key to users, so every task needs a real owner row and
-        // truncating users cascades away their tasks in one statement.
-        jdbc.execute("truncate table users cascade");
+        // tasks.project_id is a foreign key to projects, so every task needs a real project row
+        // and truncating projects and users cascades away their tasks and memberships.
+        jdbc.execute("truncate table projects, users cascade");
         insertUser(ALICE, "alice");
         insertUser(BOB, "bob");
+        insertProject(ALICE_PROJECT, "alice-project", ALICE);
+        insertProject(BOB_PROJECT, "bob-project", BOB);
     }
 
     @Test
@@ -97,7 +102,7 @@ class TaskRepositoryTest {
 
         assertEquals("read me", found.getTitle());
         assertTrue(found.isDone());
-        assertEquals(ALICE, found.getOwnerId());
+        assertEquals(ALICE_PROJECT, found.getProject().getId());
     }
 
     @Test
@@ -152,32 +157,32 @@ class TaskRepositoryTest {
     // ---------- ownership ----------
 
     @Test
-    void findByIdAndOwnerIdReturnsTheOwnersOwnTask() {
+    void findByIdAndUserIdReturnsTheOwnersOwnTask() {
         Task saved = tx.execute(s -> repository.save(task(ALICE, "hers", false)));
 
-        assertTrue(tx.execute(s -> repository.findByIdAndOwnerId(saved.getId(), ALICE)).isPresent());
+        assertTrue(tx.execute(s -> repository.findByIdAndUserId(saved.getId(), ALICE)).isPresent());
     }
 
     @Test
-    void findByIdAndOwnerIdIsEmptyForAnotherOwnersTask() {
-        // The row exists and the id is correct; only the owner is wrong. Empty here is what
-        // becomes a 404 rather than a 403 one layer up.
+    void findByIdAndUserIdIsEmptyForAnotherOwnersTask() {
+        // The row exists and the id is correct; only the project membership is wrong. Empty here
+        // is what becomes a 404 rather than a 403 one layer up.
         Task saved = tx.execute(s -> repository.save(task(ALICE, "hers", false)));
 
-        assertTrue(tx.execute(s -> repository.findByIdAndOwnerId(saved.getId(), BOB)).isEmpty());
+        assertTrue(tx.execute(s -> repository.findByIdAndUserId(saved.getId(), BOB)).isEmpty());
     }
 
     @Test
-    void deletingAUserDeletesTheirTasks() {
-        // ON DELETE CASCADE on the owner foreign key, asserted because it is a deliberate
-        // choice in V4 rather than a default: a user's tasks are meaningless without them.
+    void deletingAProjectDeletesItsTasks() {
+        // ON DELETE CASCADE on the project foreign key (V7): a project's tasks are deleted
+        // when the project itself is removed.
         tx.execute(s -> repository.save(task(BOB, "his", false)));
         tx.execute(s -> repository.save(task(ALICE, "hers", false)));
 
-        jdbc.update("delete from users where id = ?", BOB);
+        jdbc.update("delete from projects where id = ?", BOB_PROJECT);
 
-        assertEquals(List.of("hers"), titles(tx.execute(s -> repository.search(null, ALICE, null))));
-        assertEquals(1, count(), "only Bob's task should have gone");
+        assertEquals(List.of("hers"), titles(tx.execute(s -> repository.search(ALICE, null, null))));
+        assertEquals(1, count(), "only Bob's project task should have gone");
     }
 
     // ---------- search ----------
@@ -185,7 +190,7 @@ class TaskRepositoryTest {
     // One query serves every combination of the two optional filters, each switched off by a
     // null argument. The four tests below are the four combinations; between them they pin the
     // whole contract, because a predicate that stopped neutralising itself would break exactly
-    // one of them. The owner predicate is tested separately, because it must NOT neutralise.
+    // one of them. The project-membership predicate is tested separately, because it must NOT neutralise.
 
     @Test
     void searchWithoutFiltersReturnsEverythingNewestFirst() {
@@ -196,16 +201,16 @@ class TaskRepositoryTest {
 
         // Both done states come back: a null "done" must not collapse to false.
         assertEquals(List.of("newest", "middle", "oldest"),
-                titles(tx.execute(s -> repository.search(null, ALICE, null))));
+                titles(tx.execute(s -> repository.search(ALICE, null, null))));
     }
 
     @Test
     void searchByTitleIgnoresCase() {
         tx.execute(s -> repository.save(task(ALICE, "Buy Milk", false)));
 
-        assertEquals(1, tx.execute(s -> repository.search("buy milk", ALICE, null)).size());
-        assertEquals(1, tx.execute(s -> repository.search("BUY MILK", ALICE, null)).size());
-        assertEquals(0, tx.execute(s -> repository.search("buy bread", ALICE, null)).size());
+        assertEquals(1, tx.execute(s -> repository.search(ALICE, "buy milk", null)).size());
+        assertEquals(1, tx.execute(s -> repository.search(ALICE, "BUY MILK", null)).size());
+        assertEquals(0, tx.execute(s -> repository.search(ALICE, "buy bread", null)).size());
     }
 
     @Test
@@ -213,8 +218,8 @@ class TaskRepositoryTest {
         tx.execute(s -> repository.save(task(ALICE, "finished", true)));
         tx.execute(s -> repository.save(task(ALICE, "outstanding", false)));
 
-        assertEquals(List.of("finished"), titles(tx.execute(s -> repository.search(null, ALICE, true))));
-        assertEquals(List.of("outstanding"), titles(tx.execute(s -> repository.search(null, ALICE, false))));
+        assertEquals(List.of("finished"), titles(tx.execute(s -> repository.search(ALICE, null, true))));
+        assertEquals(List.of("outstanding"), titles(tx.execute(s -> repository.search(ALICE, null, false))));
     }
 
     // The reason the three finders were merged: this combination was previously unaskable.
@@ -224,12 +229,12 @@ class TaskRepositoryTest {
         tx.execute(s -> repository.save(task(ALICE, "buy milk", false)));
         tx.execute(s -> repository.save(task(ALICE, "buy bread", false)));
 
-        assertEquals(List.of("buy milk"), titles(tx.execute(s -> repository.search("buy milk", ALICE, false))));
-        assertEquals(List.of("buy milk"), titles(tx.execute(s -> repository.search("buy milk", ALICE, true))));
-        assertEquals(0, tx.execute(s -> repository.search("buy bread", ALICE, true)).size());
+        assertEquals(List.of("buy milk"), titles(tx.execute(s -> repository.search(ALICE, "buy milk", false))));
+        assertEquals(List.of("buy milk"), titles(tx.execute(s -> repository.search(ALICE, "buy milk", true))));
+        assertEquals(0, tx.execute(s -> repository.search(ALICE, "buy bread", true)).size());
     }
 
-    // Unlike title and done, the owner predicate has no null-means-everything branch. If it ever
+    // Unlike title and done, the user/project predicate has no null-means-everything branch. If it ever
     // grows one, this is the test that fails - and it is the difference between a filter and a
     // security boundary.
     @Test
@@ -237,10 +242,10 @@ class TaskRepositoryTest {
         tx.execute(s -> repository.save(task(ALICE, "hers", false)));
         tx.execute(s -> repository.save(task(BOB, "his", false)));
 
-        assertEquals(List.of("hers"), titles(tx.execute(s -> repository.search(null, ALICE, null))));
-        assertEquals(List.of("his"), titles(tx.execute(s -> repository.search(null, BOB, null))));
-        assertEquals(0, tx.execute(s -> repository.search("hers", BOB, null)).size(),
-                "a title that matches another owner's task must not widen the scope");
+        assertEquals(List.of("hers"), titles(tx.execute(s -> repository.search(ALICE, null, null))));
+        assertEquals(List.of("his"), titles(tx.execute(s -> repository.search(BOB, null, null))));
+        assertEquals(0, tx.execute(s -> repository.search(BOB, "hers", null)).size(),
+                "a title that matches another project's task must not widen the scope");
     }
 
     // Search carries its own "order by created_at desc" rather than leaning on insertion order,
@@ -252,7 +257,7 @@ class TaskRepositoryTest {
         tx.execute(s -> repository.save(task(ALICE, "stale", true, now.minus(1, ChronoUnit.DAYS))));
         tx.execute(s -> repository.save(task(ALICE, "fresh", true, now)));
 
-        assertEquals(List.of("fresh", "stale"), titles(tx.execute(s -> repository.search(null, ALICE, true))));
+        assertEquals(List.of("fresh", "stale"), titles(tx.execute(s -> repository.search(ALICE, null, true))));
     }
 
     // ---------- helpers ----------
@@ -261,6 +266,21 @@ class TaskRepositoryTest {
         jdbc.update("""
                 insert into users (id, username, email, password_hash, role, enabled)
                 values (?, ?, ?, 'x', 'USER', true)""", id, name, name + "@example.com");
+    }
+
+    private void insertProject(UUID projectId, String name, UUID managerId) {
+        jdbc.update("""
+                insert into projects (id, name, description, status, priority, start_date, due_date)
+                values (?, ?, 'test project', 'IN_PROGRESS', 'MEDIUM', current_date, current_date)""",
+                projectId, name);
+        jdbc.update("""
+                insert into projects_users (project_id, user_id, role)
+                values (?, ?, 'MANAGER')""",
+                projectId, managerId);
+    }
+
+    private static UUID projectOf(UUID userId) {
+        return ALICE.equals(userId) ? ALICE_PROJECT : BOB_PROJECT;
     }
 
     private static Task task(UUID ownerId, String title, boolean done) {
@@ -272,7 +292,7 @@ class TaskRepositoryTest {
                 .title(title)
                 .details("details")
                 .done(done)
-                .ownerId(ownerId)
+                .project(Project.builder().id(projectOf(ownerId)).build())
                 .createdAt(createdAt)
                 .build();
     }

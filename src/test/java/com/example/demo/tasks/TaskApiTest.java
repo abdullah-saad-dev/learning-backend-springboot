@@ -32,8 +32,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * The HTTP contract: status codes, media types, the version handshake, and - since tasks became
- * owned - the ownership boundary. Runs the whole stack against a real database, so a wrong status
- * is caught here rather than by a client.
+ * project-scoped - the membership boundary. Runs the whole stack against a real database, so a
+ * wrong status is caught here rather than by a client.
  * <p>
  * Requests are authenticated with the {@code jwt()} post-processor rather than {@code @WithMockUser}.
  * That is not a style choice: the controller resolves {@code @AuthenticationPrincipal Jwt}, and
@@ -49,6 +49,8 @@ class TaskApiTest {
     // Fixed rather than random so a failure names who was who.
     private static final UUID ALICE = UUID.fromString("01f11400-0000-7000-8000-00000000a11c");
     private static final UUID BOB = UUID.fromString("01f11400-0000-7000-8000-00000000b0b0");
+    private static final UUID ALICE_PROJECT = UUID.fromString("01f11400-0000-7000-8000-00000000a11d");
+    private static final UUID BOB_PROJECT = UUID.fromString("01f11400-0000-7000-8000-00000000b0b1");
 
     @Autowired
     private MockMvc mvc;
@@ -57,11 +59,13 @@ class TaskApiTest {
 
     @BeforeEach
     void reset() {
-        // tasks.owner_id is a foreign key to users, so tasks cannot be seeded without owners,
-        // and truncating users cascades away their tasks in one statement.
-        jdbc.execute("truncate table users cascade");
+        // tasks.project_id is a foreign key to projects, so tasks cannot be seeded without projects
+        // and members, and truncating projects and users cascades away their tasks in one statement.
+        jdbc.execute("truncate table projects, users cascade");
         insertUser(ALICE, "alice");
         insertUser(BOB, "bob");
+        insertProject(ALICE_PROJECT, "alice-project", ALICE);
+        insertProject(BOB_PROJECT, "bob-project", BOB);
     }
 
     // ---------- create ----------
@@ -71,7 +75,8 @@ class TaskApiTest {
         MvcResult result = mvc.perform(post("/api/tasks").with(as(ALICE))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"title":"write tests","details":"with a container","done":false}"""))
+                                {"projectId":"%s","title":"write tests","details":"with a container","done":false}"""
+                                .formatted(ALICE_PROJECT)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.title").value("write tests"))
                 .andExpect(jsonPath("$.version").value(0))
@@ -86,23 +91,31 @@ class TaskApiTest {
     }
 
     @Test
-    void createStoresTheCallerAsTheOwnerRatherThanTrustingTheBody() throws Exception {
-        // The body names Bob. The owner must still be the authenticated caller: ownership comes
-        // from the token and is not an input, so a client cannot write a task into someone
-        // else's account by asking nicely.
+    void createStoresTheTaskUnderTheAuthorizedProject() throws Exception {
+        // Even if the payload attempts to smuggle an ownerId for Bob, the task is stored under
+        // Alice's project, and Alice cannot create a task inside Bob's project.
         String id = create(ALICE, "mine", false, """
-                {"title":"mine","details":"details","done":false,"ownerId":"%s"}""".formatted(BOB));
+                {"projectId":"%s","title":"mine","details":"details","done":false,"ownerId":"%s"}"""
+                .formatted(ALICE_PROJECT, BOB));
 
-        String owner = jdbc.queryForObject(
-                "select owner_id::text from tasks where id = ?::uuid", String.class, id);
-        assertEquals(ALICE.toString(), owner);
+        String projectId = jdbc.queryForObject(
+                "select project_id::text from tasks where id = ?::uuid", String.class, id);
+        assertEquals(ALICE_PROJECT.toString(), projectId);
+
+        mvc.perform(post("/api/tasks").with(as(ALICE))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"projectId":"%s","title":"intrude","details":"d","done":false}"""
+                                .formatted(BOB_PROJECT)))
+                .andExpect(status().isNotFound());
     }
 
     @Test
     void createRejectsABlankTitle() throws Exception {
         mvc.perform(post("/api/tasks").with(as(ALICE)).contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"title":"   ","details":"d","done":false}"""))
+                                {"projectId":"%s","title":"   ","details":"d","done":false}"""
+                                .formatted(ALICE_PROJECT)))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
     }
@@ -112,7 +125,8 @@ class TaskApiTest {
         // A missing "done" used to be coerced to false, silently marking the task pending.
         mvc.perform(post("/api/tasks").with(as(ALICE)).contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"title":"no done","details":"d"}"""))
+                                {"projectId":"%s","title":"no done","details":"d"}"""
+                                .formatted(ALICE_PROJECT)))
                 .andExpect(status().isBadRequest());
     }
 
@@ -250,8 +264,8 @@ class TaskApiTest {
     void aTitleSearchDoesNotLeakAnotherOwnersTasks() throws Exception {
         create(ALICE, "buy milk", false);
 
-        // Bob guesses a title that exists - for someone else. The owner predicate is not
-        // optional, so the filter cannot widen the result past his own rows.
+        // Bob guesses a title that exists - for someone else. The project membership predicate
+        // is not optional, so the filter cannot widen the result past his own rows.
         mvc.perform(get("/api/tasks").with(as(BOB)).param("title", "buy milk"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
@@ -449,10 +463,14 @@ class TaskApiTest {
 
     /**
      * Authenticates as one user. JwtConfig sets "sub" as the principal claim name, so the
-     * subject here is exactly what TaskController reads back as the owner id.
+     * subject here is exactly what AppSecurityContext reads back as the caller's user id.
      */
     private static RequestPostProcessor as(UUID userId) {
         return jwt().jwt(builder -> builder.subject(userId.toString()));
+    }
+
+    private static UUID projectOf(UUID userId) {
+        return ALICE.equals(userId) ? ALICE_PROJECT : BOB_PROJECT;
     }
 
     private void insertUser(UUID id, String name) {
@@ -461,12 +479,24 @@ class TaskApiTest {
                 values (?, ?, ?, 'x', 'USER', true)""", id, name, name + "@example.com");
     }
 
+    private void insertProject(UUID projectId, String name, UUID managerId) {
+        jdbc.update("""
+                insert into projects (id, name, description, status, priority, start_date, due_date)
+                values (?, ?, 'test project', 'IN_PROGRESS', 'MEDIUM', current_date, current_date)""",
+                projectId, name);
+        jdbc.update("""
+                insert into projects_users (project_id, user_id, role)
+                values (?, ?, 'MANAGER')""",
+                projectId, managerId);
+    }
+
     // JSON is written out by hand rather than serialised from the request records: the point of
     // these tests is the wire format, and building the body with the same mapper the server
     // parses it with would hide a mismatch instead of catching it.
     private String create(UUID owner, String title, boolean done) throws Exception {
         return create(owner, title, done, """
-                {"title":"%s","details":"details","done":%s}""".formatted(title, done));
+                {"projectId":"%s","title":"%s","details":"details","done":%s}"""
+                .formatted(projectOf(owner), title, done));
     }
 
     private String create(UUID owner, String title, boolean done, String body) throws Exception {

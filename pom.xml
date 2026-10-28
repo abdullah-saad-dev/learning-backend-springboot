@@ -30,8 +30,6 @@
         <java.version>25</java.version>
         <springdoc.version>3.0.0</springdoc.version>
         <testcontainers.version>2.0.5</testcontainers.version>
-        <maven.test.skip>true</maven.test.skip>
-
     </properties>
     <dependencies>
         <dependency>

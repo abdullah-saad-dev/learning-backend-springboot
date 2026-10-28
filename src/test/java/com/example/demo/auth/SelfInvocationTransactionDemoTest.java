@@ -38,16 +38,18 @@ class SelfInvocationTransactionDemoTest {
     @Autowired
     private JdbcTemplate jdbc;
 
-    // tasks.owner_id became a NOT NULL foreign key, so the two writes below need a real owner.
-    // Nothing here is about ownership - it is the cheapest row that satisfies the constraint.
-    private static final UUID OWNER = UUID.fromString("01f11400-0000-7000-8000-00000000dec0");
+    // tasks.project_id is a NOT NULL foreign key to projects, so the two writes below need a
+    // real project row. Nothing here is about project ownership - it is the cheapest row that
+    // satisfies the constraint.
+    private static final UUID PROJECT = UUID.fromString("01f11400-0000-7000-8000-00000000dec0");
 
     @BeforeEach
     void clean() {
-        jdbc.execute("truncate table users cascade");
+        jdbc.execute("truncate table projects, users cascade");
         jdbc.update("""
-                insert into users (id, username, email, password_hash, role, enabled)
-                values (?, 'demo', 'demo@example.com', 'x', 'USER', true)""", OWNER);
+                insert into projects (id, name, description, status, priority, start_date, due_date)
+                values (?, 'demo', 'demo project', 'IN_PROGRESS', 'MEDIUM', current_date, current_date)""",
+                PROJECT);
     }
 
     @Test
@@ -90,7 +92,7 @@ class SelfInvocationTransactionDemoTest {
 
         @Transactional(propagation = Propagation.REQUIRES_NEW)
         public void write(String title) {
-            jdbc.update("insert into tasks (title, owner_id) values (?, ?)", title, OWNER);
+            jdbc.update("insert into tasks (title, project_id) values (?, ?)", title, PROJECT);
         }
     }
 
@@ -105,7 +107,7 @@ class SelfInvocationTransactionDemoTest {
 
         @Transactional(propagation = Propagation.REQUIRES_NEW)
         public void write(String title) {
-            jdbc.update("insert into tasks (title, owner_id) values (?, ?)", title, OWNER);
+            jdbc.update("insert into tasks (title, project_id) values (?, ?)", title, PROJECT);
         }
 
         @Transactional

@@ -87,9 +87,9 @@ class RefreshApiTest {
                 .contains("HttpOnly")
                 .contains("Secure")
                 .contains("SameSite=Strict")
-                // scoped so the long-lived credential rides on the one request that needs it,
-                // rather than on every call to the API
-                .contains("Path=/auth/refresh");
+                // scoped so the long-lived credential rides on /auth endpoints (/auth/refresh,
+                // /auth/logout), rather than on every call to /api/**
+                .contains("Path=/auth");
     }
 
     @Test
