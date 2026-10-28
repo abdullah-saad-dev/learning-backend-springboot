@@ -1,6 +1,8 @@
 package com.example.demo;
 
 import com.example.demo.auth.exceptions.DuplicateEmailsException;
+import com.example.demo.project.exceptions.ProjectConflictException;
+import com.example.demo.project.exceptions.ProjectNotFoundException;
 import com.example.demo.tasks.exceptions.InvalidAssigneeException;
 import com.example.demo.tasks.exceptions.TaskConflictException;
 import com.example.demo.tasks.exceptions.TaskNotFoundException;
@@ -32,6 +34,24 @@ public class ApiExceptionHandler {
                 .addKeyValue("error", ex.getMessage())
                 .log();
         return problem(HttpStatus.NOT_FOUND, "Task not found", ex.getMessage());
+    }
+
+    @ExceptionHandler(ProjectNotFoundException.class)
+    public ProblemDetail handle(ProjectNotFoundException ex) {
+        log.atDebug()
+                .setMessage("project not found")
+                .addKeyValue("error", ex.getMessage())
+                .log();
+        return problem(HttpStatus.NOT_FOUND, "Project not found", ex.getMessage());
+    }
+
+    @ExceptionHandler(ProjectConflictException.class)
+    public ProblemDetail handle(ProjectConflictException ex) {
+        log.atDebug()
+                .setMessage("project conflict")
+                .addKeyValue("error", ex.getMessage())
+                .log();
+        return problem(HttpStatus.CONFLICT, "Conflicting change", ex.getMessage());
     }
 
     @ExceptionHandler(InvalidAssigneeException.class)
