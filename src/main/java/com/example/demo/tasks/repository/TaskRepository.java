@@ -1,7 +1,6 @@
 package com.example.demo.tasks.repository;
 
 import com.example.demo.tasks.entity.Task;
-import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -15,11 +14,7 @@ import java.util.UUID;
 
 @Repository
 public interface TaskRepository extends JpaRepository<Task, UUID> {
-    // hibernate infers the type directly from the column but not from functions output.
-    // The entity graph pulls assignees in the same query: open-in-view is off, so the
-    // controller maps TaskResponse after the session is closed and a lazy collection
-    // touched there would throw.
-    @EntityGraph(attributePaths = "assignees")
+    // hibernate infers the type directly from the column but not from functions output
     @Query("""
     select t from Task as t join t.project.membersWithRole as pu
         where key(pu).id = :userId
@@ -29,12 +24,10 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
     """)
     List<Task> search(@Param("userId") UUID userId, @Param("title") String title, @Param("done") Boolean done);
 
-    // Backed by idx_tasks_users_user_id (V12): the lookup starts from the user, which the
-    // (task_id, user_id) primary key cannot serve.
-    @EntityGraph(attributePaths = "assignees")
+    // Backed by idx_tasks_assignee_id (V12).
     @Query("""
-    select t from Task t join t.assignees a
-        where a.id = :userId and t.project.id = :projectId
+    select t from Task t
+        where t.assignee.id = :userId and t.project.id = :projectId
         order by t.createdAt desc
     """)
     List<Task> findAssignedToUserInProject(@Param("userId") UUID userId, @Param("projectId") UUID projectId);
@@ -43,13 +36,17 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
     @Query("DELETE FROM Task t WHERE t.id = :id AND t.version = :version")
     int deleteById(UUID id, long version);
 
+    @Modifying
+    @Query("UPDATE Task t SET t.assignee = null WHERE t.project.id = :projectId AND t.assignee.id = :userId")
+    int unassignUserFromProject(@Param("projectId") UUID projectId, @Param("userId") UUID userId);
+
     @Query("""
         select case when count(t) > 0 then true else false end
-        from Task t join t.assignees a
-        where t.id = :taskId and a.id = :userId
+        from Task t
+        where t.id = :taskId and t.assignee.id = :userId
     """)
     boolean isUserAssignedToTask(@Param("taskId") UUID taskId, @Param("userId") UUID userId);
-    @EntityGraph(attributePaths = "assignees")
+
     @Query("""
     SELECT t FROM Task t 
     JOIN t.project p

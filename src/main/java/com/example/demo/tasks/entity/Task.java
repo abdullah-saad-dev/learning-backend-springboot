@@ -13,8 +13,6 @@ import org.hibernate.annotations.UuidGenerator;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
 
 @NoArgsConstructor
@@ -49,6 +47,7 @@ public class Task {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name ="project_id", nullable = false)
+    @ToString.Exclude
     private Project project;
 
     @Column(name = "done")
@@ -62,30 +61,8 @@ public class Task {
     @Column(name = "version")
     private Long version;
 
-    // tasks_users can hold several rows per task, but the API exposes one assignee. Keeping
-    // the join table leaves room for multiple assignees later without another migration;
-    // until then every write goes through setAssignee, which keeps it at zero or one row.
-    @ManyToMany
-    @JoinTable(
-            name = "tasks_users",
-            joinColumns = @JoinColumn(name = "task_id"),
-            inverseJoinColumns = @JoinColumn(name = "user_id")
-    )
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assignee_id")
     @ToString.Exclude
-    private List<User> assignees;
-
-    public User getAssignee() {
-        return assignees == null || assignees.isEmpty() ? null : assignees.getFirst();
-    }
-
-    /** Replaces whoever is assigned. null unassigns. */
-    public void setAssignee(User user) {
-        if (assignees == null) {
-            assignees = new ArrayList<>();
-        }
-        assignees.clear();
-        if (user != null) {
-            assignees.add(user);
-        }
-    }
+    private User assignee;
 }
