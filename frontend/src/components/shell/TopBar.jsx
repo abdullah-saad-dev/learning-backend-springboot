@@ -6,7 +6,16 @@ const FILTERS = [
   ['all', 'All']
 ];
 
-export default function TopBar({ heading, project, query, onQuery, filter, onFilter }) {
+export default function TopBar({
+  heading,
+  project,
+  query,
+  onQuery,
+  filter,
+  onFilter,
+  onNewTask,
+  onOpenMembers
+}) {
   return (
     <header className="topbar">
       <h1>
@@ -25,6 +34,18 @@ export default function TopBar({ heading, project, query, onQuery, filter, onFil
             Solo project
           </span>
         )}
+
+        {project && (
+          <button
+            type="button"
+            className="role-chip"
+            style={{ cursor: 'pointer' }}
+            onClick={onOpenMembers}
+            title="View and manage project members"
+          >
+            {project.memberCount} {project.memberCount === 1 ? 'member' : 'members'}
+          </button>
+        )}
       </h1>
 
       <input className="search" value={query} placeholder="Search titles…"
@@ -38,6 +59,17 @@ export default function TopBar({ heading, project, query, onQuery, filter, onFil
           </button>
         ))}
       </div>
+
+      {onNewTask && (
+        <button
+          type="button"
+          className="btn btn-ghost"
+          style={{ padding: '6px 11px', fontSize: '12.5px', flex: 'none' }}
+          onClick={onNewTask}
+        >
+          + New task
+        </button>
+      )}
     </header>
   );
 }

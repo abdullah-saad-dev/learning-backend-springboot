@@ -6,7 +6,8 @@ import jakarta.validation.constraints.NotNull;
 import java.util.UUID;
 
 public record AddProjectMemberRequest(
-        @NotNull UUID userId,
+        UUID userId,
+        String email,
         @NotNull ProjectRole role
 ) {
 }

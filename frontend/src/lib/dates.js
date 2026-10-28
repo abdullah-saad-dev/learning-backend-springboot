@@ -1,19 +1,36 @@
+import { USE_LIVE_API } from '../config.js';
+
 /**
- * Dates are read against TODAY rather than the system clock so the fixture
- * data keeps its intended relationships — "today", "tomorrow", overdue —
- * whenever the prototype is opened. Delete this constant and use new Date()
- * once the data is real.
+ * In mock mode, dates are read against a fixed anchor so the fixture data
+ * keeps its intended relationships ("today", "tomorrow", overdue). In live
+ * mode, we compare against today's UTC midnight.
  */
-const TODAY = new Date('2026-09-09T00:00:00Z');
+const MOCK_TODAY = new Date('2026-09-09T00:00:00Z');
+
+function startOfToday() {
+  if (!USE_LIVE_API) return MOCK_TODAY;
+  const now = new Date();
+  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+}
+
+function parseDate(iso) {
+  if (!iso) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    return new Date(`${iso}T00:00:00Z`);
+  }
+  return new Date(iso);
+}
 
 export function fmtDate(iso) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  const d = parseDate(iso);
+  if (!d || Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
 export function daysFrom(iso) {
-  if (!iso) return null;
-  return Math.round((new Date(iso) - TODAY) / 86400000);
+  const d = parseDate(iso);
+  if (!d || Number.isNaN(d.getTime())) return null;
+  return Math.round((d - startOfToday()) / 86400000);
 }
 
 export function dueLabel(iso) {
@@ -25,4 +42,4 @@ export function dueLabel(iso) {
   return fmtDate(iso);
 }
 
-export const isOverdue = (task) => !task.done && daysFrom(task.dueDate) < 0;
+export const isOverdue = (task) => !task.done && daysFrom(task.dueDate) !== null && daysFrom(task.dueDate) < 0;

@@ -9,7 +9,7 @@ import AccountMenu from './AccountMenu.jsx';
  * Projects are grouped by role rather than sorted into one list, because the
  * grouping is the answer to the question the colour code raises.
  */
-export default function Rail({ me, projects, tasks, view, onView, onLogout }) {
+export default function Rail({ me, projects, tasks, view, onView, onNewProject, onLogout }) {
   const led = projects.filter((p) => p.role === 'LEADER' || p.role === 'MANAGER');
   const joined = projects.filter((p) => p.role !== 'LEADER' && p.role !== 'MANAGER');
 
@@ -24,7 +24,20 @@ export default function Rail({ me, projects, tasks, view, onView, onLogout }) {
 
       <div className="rail-head">
         <div className="wordmark"><i />{PRODUCT}</div>
-        <span className="kbd">⌘K</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {onNewProject && (
+            <button
+              type="button"
+              className="kbd"
+              style={{ cursor: 'pointer' }}
+              onClick={onNewProject}
+              title="Create a new project"
+            >
+              + Project
+            </button>
+          )}
+          <span className="kbd">⌘K</span>
+        </div>
       </div>
 
       <div className="rail-scroll">

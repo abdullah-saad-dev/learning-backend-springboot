@@ -9,6 +9,9 @@ import TaskList from './components/tasks/TaskList.jsx';
 import Inspector from './components/tasks/Inspector.jsx';
 import Palette from './components/overlays/Palette.jsx';
 import ConfirmSheet from './components/overlays/ConfirmSheet.jsx';
+import NewTaskSheet from './components/overlays/NewTaskSheet.jsx';
+import NewProjectSheet from './components/overlays/NewProjectSheet.jsx';
+import MembersSheet from './components/overlays/MembersSheet.jsx';
 
 function emptyCopyFor({ query, filter, view }) {
   if (query) {
@@ -28,6 +31,7 @@ function emptyCopyFor({ query, filter, view }) {
 
 export default function App() {
   const [me, setMe] = useState(null);
+  const [booting, setBooting] = useState(USE_LIVE_API);
   const [mode, setMode] = useState('login');
 
   const [projects, setProjects] = useState([]);
@@ -36,10 +40,13 @@ export default function App() {
   const [view, setView] = useState({ type: 'mine' });
   const [filter, setFilter] = useState('open');
   const [query, setQuery] = useState('');
-  const [selected, setSelected] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
   const [conflictOn, setConflictOn] = useState(null);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [membersOpen, setMembersOpen] = useState(false);
   const [confirmScope, setConfirmScope] = useState(null);
   const [toast, setToast] = useState(null);
 
@@ -48,16 +55,38 @@ export default function App() {
     setTimeout(() => setToast(null), 2600);
   }, []);
 
+  // Attempt silent session restoration from the HttpOnly refresh cookie on initial load
+  useEffect(() => {
+    if (!USE_LIVE_API) return;
+    let live = true;
+    api.refresh()
+      .then((user) => { if (live) setMe(user); })
+      .catch(() => {})
+      .finally(() => { if (live) setBooting(false); });
+    return () => { live = false; };
+  }, []);
+
+  const reloadData = useCallback(async () => {
+    const [p, t] = await Promise.all([api.listProjects(), api.listTasks()]);
+    setProjects(p);
+    setTasks(t);
+    return { projects: p, tasks: t };
+  }, []);
+
   useEffect(() => {
     if (!me) return;
     let live = true;
-    Promise.all([api.listProjects(), api.listTasks()]).then(([p, t]) => {
-      if (!live) return;
-      setProjects(p);
-      setTasks(t);
-    });
+    Promise.all([api.listProjects(), api.listTasks()])
+      .then(([p, t]) => {
+        if (!live) return;
+        setProjects(p);
+        setTasks(t);
+      })
+      .catch(() => {
+        if (live) notify('Could not load workspace data.');
+      });
     return () => { live = false; };
-  }, [me]);
+  }, [me, notify]);
 
   useEffect(() => {
     if (!me) return;
@@ -76,6 +105,11 @@ export default function App() {
     [projects]
   );
 
+  const selected = useMemo(
+    () => tasks.find((t) => t.id === selectedId) || null,
+    [tasks, selectedId]
+  );
+
   const activeProject = view.type === 'project' ? projectsById[view.id] : null;
 
   const visible = useMemo(() => {
@@ -90,36 +124,49 @@ export default function App() {
   }, [tasks, view, filter, query, me]);
 
   /**
-   * Optimistic toggle. The version rides along with the request; a 409 means
-   * the row moved underneath us, so the change is rolled back and the
-   * inspector explains it instead of the edit vanishing silently.
+   * Optimistic toggle. The version rides along with the request; when the server
+   * responds we store the updated task (with its bumped version). A 409 means
+   * the row moved underneath us, so the change is rolled back and the inspector
+   * explains it instead of the edit vanishing silently.
    */
   const toggle = useCallback(async (task) => {
     setTasks((all) => all.map((t) => (t.id === task.id ? { ...t, done: !t.done } : t)));
     try {
-      await api.setDone(task.id, !task.done, task.version);
+      const updated = await api.setDone(task.id, !task.done, task.version);
+      if (updated && typeof updated.version === 'number') {
+        setTasks((all) => all.map((t) => (t.id === task.id ? { ...t, ...updated } : t)));
+      }
     } catch (err) {
       setTasks((all) => all.map((t) => (t.id === task.id ? { ...t, done: task.done } : t)));
       if (err.conflict) {
-        setSelected(task);
+        setSelectedId(task.id);
         setConflictOn(task.id);
       } else {
-        notify('Could not save that change.');
+        notify(err.detail || 'Could not save that change.');
       }
     }
   }, [notify]);
 
-  const goTo = useCallback((v) => { setView(v); setSelected(null); }, []);
+  const goTo = useCallback((v) => { setView(v); setSelectedId(null); }, []);
 
   async function doLogout(scope) {
     setConfirmScope(null);
-    await (scope === 'all' ? api.logoutEverywhere() : api.logout());
+    try {
+      await (scope === 'all' ? api.logoutEverywhere() : api.logout());
+    } catch {
+      notify('Could not sign out completely.');
+      return;
+    }
     setMe(null);
     setMode('login');
     setProjects([]);
     setTasks([]);
-    setSelected(null);
+    setSelectedId(null);
     setView({ type: 'mine' });
+  }
+
+  if (booting) {
+    return null;
   }
 
   if (!me) {
@@ -137,6 +184,7 @@ export default function App() {
       <Rail
         me={me} projects={projects} tasks={tasks} view={view}
         onView={goTo}
+        onNewProject={() => setNewProjectOpen(true)}
         onLogout={setConfirmScope}
       />
 
@@ -145,12 +193,14 @@ export default function App() {
           heading={heading} project={activeProject}
           query={query} onQuery={setQuery}
           filter={filter} onFilter={setFilter}
+          onNewTask={projects.length > 0 ? () => setNewTaskOpen(true) : null}
+          onOpenMembers={activeProject ? () => setMembersOpen(true) : null}
         />
 
         <div className={`board${selected ? ' with-panel' : ''}`}>
           <TaskList
             tasks={visible} projects={projects} selected={selected}
-            onSelect={(t) => { setSelected(t); setConflictOn(null); }}
+            onSelect={(t) => { setSelectedId(t.id); setConflictOn(null); }}
             onToggle={toggle}
             emptyFor={emptyCopyFor({ query, filter, view })}
           />
@@ -159,9 +209,24 @@ export default function App() {
             <Inspector
               task={selected}
               project={projectsById[selected.projectId]}
+              me={me}
               conflict={conflictOn === selected.id}
-              onResolve={() => { setConflictOn(null); notify('Reloaded from the server.'); }}
-              onClose={() => { setSelected(null); setConflictOn(null); }}
+              onConflict={(id) => setConflictOn(id)}
+              onResolve={async () => {
+                await reloadData();
+                setConflictOn(null);
+                notify('Reloaded from the server.');
+              }}
+              onUpdated={(updated) => {
+                setTasks((all) => all.map((t) => (t.id === updated.id ? updated : t)));
+                notify('Task saved.');
+              }}
+              onDeleted={(id) => {
+                setTasks((all) => all.filter((t) => t.id !== id));
+                setSelectedId(null);
+                notify('Task deleted.');
+              }}
+              onClose={() => { setSelectedId(null); setConflictOn(null); }}
             />
           )}
         </div>
@@ -172,7 +237,53 @@ export default function App() {
           projects={projects}
           onClose={() => setPaletteOpen(false)}
           onView={goTo}
+          onNewTask={projects.length > 0 ? () => setNewTaskOpen(true) : null}
+          onNewProject={() => setNewProjectOpen(true)}
           onLogout={setConfirmScope}
+        />
+      )}
+
+      {newTaskOpen && (
+        <NewTaskSheet
+          projects={projects}
+          defaultProjectId={activeProject?.id}
+          onClose={() => setNewTaskOpen(false)}
+          onCreated={(created) => {
+            setTasks((all) => [created, ...all]);
+            setNewTaskOpen(false);
+            setSelectedId(created.id);
+            notify('Task created.');
+          }}
+        />
+      )}
+
+      {newProjectOpen && (
+        <NewProjectSheet
+          onClose={() => setNewProjectOpen(false)}
+          onCreated={(created) => {
+            setProjects((all) => [created, ...all]);
+            setNewProjectOpen(false);
+            setView({ type: 'project', id: created.id });
+            setSelectedId(null);
+            notify('Project created.');
+          }}
+        />
+      )}
+
+      {membersOpen && activeProject && (
+        <MembersSheet
+          project={activeProject}
+          me={me}
+          onClose={() => setMembersOpen(false)}
+          onChanged={() => { reloadData(); }}
+          onDeleted={(deletedId) => {
+            setMembersOpen(false);
+            setProjects((all) => all.filter((p) => p.id !== deletedId));
+            setTasks((all) => all.filter((t) => t.projectId !== deletedId));
+            setView({ type: 'mine' });
+            setSelectedId(null);
+            notify('Project deleted.');
+          }}
         />
       )}
 

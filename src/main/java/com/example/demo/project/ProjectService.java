@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -95,12 +96,17 @@ public class ProjectService {
             }
         }
         members.put(current, ProjectRole.MANAGER);
+        LocalDate startDate = r.startDate() != null ? r.startDate() : LocalDate.now(clock);
+        LocalDate dueDate = r.dueDate() != null ? r.dueDate() : startDate.plusDays(30);
+        if (dueDate.isBefore(startDate)) {
+            throw new IllegalArgumentException("Due date cannot be earlier than start date");
+        }
         Project project = Project.builder()
                 .name(r.name())
                 .createdAt(clock.instant())
                 .description(r.description())
-                .dueDate(r.dueDate())
-                .startDate(r.startDate())
+                .dueDate(dueDate)
+                .startDate(startDate)
                 .priority(r.priority())
                 .status(r.status())
                 .membersWithRole(members)
@@ -172,15 +178,29 @@ public class ProjectService {
     @Transactional
     @PreAuthorize("hasRole('ADMIN') or @projectSecurity.isManager(#projectId)")
     public ProjectMemberResponse addMember(UUID projectId, UUID userId, ProjectRole role) {
+        return addMember(projectId, userId, null, role);
+    }
+
+    @Transactional
+    @PreAuthorize("hasRole('ADMIN') or @projectSecurity.isManager(#projectId)")
+    public ProjectMemberResponse addMember(UUID projectId, UUID userId, String email, ProjectRole role) {
         Project project = read(projectId);
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
+        User user;
+        if (userId != null) {
+            user = userRepository.findById(userId)
+                    .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
+        } else if (email != null && !email.isBlank()) {
+            user = userRepository.findByEmail(email.trim())
+                    .orElseThrow(() -> new IllegalArgumentException("No account found for " + email.trim()));
+        } else {
+            throw new IllegalArgumentException("Either userId or email is required");
+        }
         ProjectRole finalRole = role != null ? role : ProjectRole.MEMBER;
         project.addMember(user, finalRole);
         projectRepository.save(project);
         eventPublisher.publishEvent(new AuditEvent(
                 "MEMBER_ADDED", "PROJECT", projectId, securityContext.getCurrentUserId(),
-                Map.of("memberId", userId.toString(), "username", user.getUsername(), "role", finalRole.name())));
+                Map.of("memberId", user.getId().toString(), "username", user.getUsername(), "role", finalRole.name())));
         return new ProjectMemberResponse(user.getId(), user.getUsername(), user.getEmail(), finalRole);
     }
 

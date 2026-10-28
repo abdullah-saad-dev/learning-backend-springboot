@@ -28,6 +28,7 @@ export default function AuthScreen({ mode, onMode, onDone }) {
       setError(
         err.status === 401 ? 'That email and password do not match an account.'
         : err.status === 409 ? 'An account already uses that email.'
+        : err.status === 400 ? (err.detail || 'Please check your input (password must be at least 8 characters).')
         : 'Could not reach the server. Check that Spring Boot is running on port 8080.'
       );
       setBusy(false);
@@ -93,11 +94,10 @@ export default function AuthScreen({ mode, onMode, onDone }) {
               <label htmlFor="password">Password</label>
               <input id="password" type="password" value={form.password} onChange={set('password')}
                      autoComplete={isSignup ? 'new-password' : 'current-password'}
-                     placeholder="Your password" required />
+                     placeholder="Your password" minLength={isSignup ? 8 : undefined} required />
               {isSignup && (
                 <p className="hint">
-                  The API accepts any non-blank password today. A length rule belongs
-                  here once it exists.
+                  At least 8 characters.
                 </p>
               )}
             </div>

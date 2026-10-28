@@ -63,6 +63,15 @@ public class ApiExceptionHandler {
         return problem(HttpStatus.BAD_REQUEST, "Invalid assignee", ex.getMessage());
     }
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ProblemDetail handle(IllegalArgumentException ex) {
+        log.atDebug()
+                .setMessage("bad request argument")
+                .addKeyValue("error", ex.getMessage())
+                .log();
+        return problem(HttpStatus.BAD_REQUEST, "Invalid request", ex.getMessage());
+    }
+
     /**
      * The caller edited a stale copy: their version is behind the stored one.
      */

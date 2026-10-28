@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { isLead, roleClass } from '../../lib/roles.js';
 
-export default function Palette({ projects, onClose, onView, onLogout }) {
+export default function Palette({ projects, onClose, onView, onNewTask, onNewProject, onLogout }) {
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const input = useRef(null);
@@ -10,6 +10,8 @@ export default function Palette({ projects, onClose, onView, onLogout }) {
 
   const items = useMemo(() => {
     const all = [
+      { key: 'new-task', label: 'Create new task', cat: 'Action', run: () => onNewTask?.() },
+      { key: 'new-project', label: 'Create new project', cat: 'Action', run: () => onNewProject?.() },
       { key: 'mine', label: 'My tasks', cat: 'Go', run: () => onView({ type: 'mine' }) },
       { key: 'all', label: 'Everything', cat: 'Go', run: () => onView({ type: 'all' }) },
       ...projects.map((p) => ({
@@ -24,7 +26,7 @@ export default function Palette({ projects, onClose, onView, onLogout }) {
     ];
     const needle = query.trim().toLowerCase();
     return needle ? all.filter((x) => x.label.toLowerCase().includes(needle)) : all;
-  }, [query, projects, onView, onLogout]);
+  }, [query, projects, onView, onNewTask, onNewProject, onLogout]);
 
   useEffect(() => { setActive(0); }, [query]);
 

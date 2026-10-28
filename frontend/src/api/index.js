@@ -86,7 +86,8 @@ export async function listTasks({ title, done } = {}) {
   const q = new URLSearchParams();
   if (title) q.set('title', title);
   if (done !== undefined && done !== null) q.set('done', String(done));
-  return http(`/api/tasks?${q.toString()}`);
+  const qs = q.toString();
+  return http(qs ? `/api/tasks?${qs}` : '/api/tasks');
 }
 
 /**
@@ -103,7 +104,7 @@ export async function createTask(body) {
 
 /** REAL — PATCH /api/tasks/{id}/done { done, version }. Sending the version is what makes a 409 possible. */
 export async function setDone(id, done, version) {
-  if (!USE_LIVE_API) { await wait(180); return { ok: true }; }
+  if (!USE_LIVE_API) { await wait(180); return { id, done, version: version + 1 }; }
   return http(`/api/tasks/${id}/done`, {
     method: 'PATCH',
     body: JSON.stringify({ done, version })
@@ -115,7 +116,7 @@ export async function setDone(id, done, version) {
  * Full replacement: omitting dueDate or assigneeId clears it.
  */
 export async function updateTask(id, body) {
-  if (!USE_LIVE_API) { await wait(200); return { ok: true }; }
+  if (!USE_LIVE_API) { await wait(200); return { id, ...body, version: (body.version ?? 0) + 1 }; }
   return http(`/api/tasks/${id}`, { method: 'PUT', body: JSON.stringify(body) });
 }
 
@@ -138,6 +139,44 @@ export async function listProjects() {
 }
 
 /**
+ * REAL — POST /api/projects
+ * { name, description, priority, status, startDate?, dueDate? }
+ */
+export async function createProject(body) {
+  if (!USE_LIVE_API) {
+    await wait(240);
+    return {
+      id: crypto.randomUUID(),
+      role: 'MANAGER',
+      memberCount: 1,
+      version: 0,
+      createdAt: new Date().toISOString(),
+      ...body
+    };
+  }
+  return http('/api/projects', { method: 'POST', body: JSON.stringify(body) });
+}
+
+/**
+ * REAL — PUT /api/projects/{id}
+ */
+export async function updateProject(id, body) {
+  if (!USE_LIVE_API) { await wait(200); return { id, ...body }; }
+  return http(`/api/projects/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ id, ...body })
+  });
+}
+
+/**
+ * REAL — DELETE /api/projects/{id}?version=
+ */
+export async function deleteProject(id, version) {
+  if (!USE_LIVE_API) { await wait(200); return null; }
+  return http(`/api/projects/${id}?version=${version}`, { method: 'DELETE' });
+}
+
+/**
  * REAL — GET /api/projects/{id}/members → [{ id, username, email, role }]
  */
 export async function listMembers(projectId) {
@@ -146,6 +185,36 @@ export async function listMembers(projectId) {
     return clone(FIXTURES.members[projectId] || []);
   }
   return http(`/api/projects/${projectId}/members`);
+}
+
+/**
+ * REAL — POST /api/projects/{id}/members { email?, userId?, role }
+ */
+export async function addMember(projectId, body) {
+  if (!USE_LIVE_API) { await wait(160); return body; }
+  return http(`/api/projects/${projectId}/members`, {
+    method: 'POST',
+    body: JSON.stringify(body)
+  });
+}
+
+/**
+ * REAL — DELETE /api/projects/{id}/members/{userId}
+ */
+export async function removeMember(projectId, userId) {
+  if (!USE_LIVE_API) { await wait(160); return null; }
+  return http(`/api/projects/${projectId}/members/${userId}`, { method: 'DELETE' });
+}
+
+/**
+ * REAL — PUT /api/projects/{id}/members/{userId}/role { role }
+ */
+export async function updateMemberRole(projectId, userId, role) {
+  if (!USE_LIVE_API) { await wait(160); return { id: userId, role }; }
+  return http(`/api/projects/${projectId}/members/${userId}/role`, {
+    method: 'PUT',
+    body: JSON.stringify({ role })
+  });
 }
 
 /**

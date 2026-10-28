@@ -60,9 +60,12 @@ public class ProjectController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<ProjectResponse> update(@Valid @RequestBody UpdateProjectRequest r) {
+    public ResponseEntity<ProjectResponse> update(@PathVariable("id") UUID id,
+                                                  @Valid @RequestBody UpdateProjectRequest r) {
         UUID currentUserId = securityContext.getCurrentUserId();
-        ProjectResponse response = ProjectResponse.of(projectService.update(r), currentUserId);
+        UpdateProjectRequest normalized = r.id() != null ? r : new UpdateProjectRequest(
+                id, r.name(), r.description(), r.priority(), r.status(), r.startDate(), r.dueDate(), r.version());
+        ProjectResponse response = ProjectResponse.of(projectService.update(normalized), currentUserId);
         return ResponseEntity.ok().body(response);
     }
 
@@ -74,7 +77,7 @@ public class ProjectController {
     @PostMapping("/{id}/members")
     public ResponseEntity<ProjectMemberResponse> addMember(@PathVariable("id") UUID id,
                                                            @Valid @RequestBody AddProjectMemberRequest r) {
-        ProjectMemberResponse member = projectService.addMember(id, r.userId(), r.role());
+        ProjectMemberResponse member = projectService.addMember(id, r.userId(), r.email(), r.role());
         return ResponseEntity.ok(member);
     }
 
