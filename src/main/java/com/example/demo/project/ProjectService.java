@@ -1,5 +1,6 @@
 package com.example.demo.project;
 
+import com.example.demo.audit.AuditEvent;
 import com.example.demo.auth.AppSecurityContext;
 import com.example.demo.auth.entity.User;
 import com.example.demo.auth.repository.UserRepository;
@@ -11,13 +12,16 @@ import com.example.demo.project.enums.ProjectRole;
 import com.example.demo.project.enums.ProjectStatus;
 import com.example.demo.project.exceptions.ProjectConflictException;
 import com.example.demo.project.exceptions.ProjectNotFoundException;
+import com.example.demo.tasks.repository.TaskRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -26,16 +30,21 @@ import java.util.UUID;
 @Service
 public class ProjectService {
     private final ProjectRepository projectRepository;
+    private final TaskRepository taskRepository;
     private final Clock clock;
     private final AppSecurityContext securityContext;
     private final UserRepository userRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public ProjectService(ProjectRepository projectRepository, Clock clock,
-                          AppSecurityContext securityContext, UserRepository userRepository) {
+    public ProjectService(ProjectRepository projectRepository, TaskRepository taskRepository,
+                          Clock clock, AppSecurityContext securityContext, UserRepository userRepository,
+                          ApplicationEventPublisher eventPublisher) {
         this.projectRepository = projectRepository;
+        this.taskRepository = taskRepository;
         this.clock = clock;
         this.securityContext = securityContext;
         this.userRepository = userRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     public Project findById(UUID id) {
@@ -97,6 +106,8 @@ public class ProjectService {
                 .membersWithRole(members)
                 .build();
         Project savedProject = projectRepository.save(project);
+        eventPublisher.publishEvent(new AuditEvent(
+                "PROJECT_CREATED", "PROJECT", savedProject.getId(), current.getId(), projectChanges(savedProject)));
         log.atInfo()
                 .addKeyValue("projectId", savedProject.getId())
                 .addKeyValue("managerId", current.getId())
@@ -113,6 +124,8 @@ public class ProjectService {
         if (deletedRows == 0) {
             throw new ProjectConflictException("the project changed while viewing, please refresh the page and try again");
         }
+        eventPublisher.publishEvent(new AuditEvent(
+                "PROJECT_DELETED", "PROJECT", id, userId, Map.of("version", expectedVersion)));
         log.atInfo()
                 .addKeyValue("projectId", id)
                 .setMessage("project deleted")
@@ -133,6 +146,8 @@ public class ProjectService {
         if (r.status() != null) project.setStatus(r.status());
 
         Project saved = projectRepository.save(project);
+        eventPublisher.publishEvent(new AuditEvent(
+                "PROJECT_UPDATED", "PROJECT", saved.getId(), userId, projectChanges(saved)));
         log.atInfo()
                 .addKeyValue("projectId", r.id())
                 .setMessage("project updated")
@@ -163,6 +178,9 @@ public class ProjectService {
         ProjectRole finalRole = role != null ? role : ProjectRole.MEMBER;
         project.addMember(user, finalRole);
         projectRepository.save(project);
+        eventPublisher.publishEvent(new AuditEvent(
+                "MEMBER_ADDED", "PROJECT", projectId, securityContext.getCurrentUserId(),
+                Map.of("memberId", userId.toString(), "username", user.getUsername(), "role", finalRole.name())));
         return new ProjectMemberResponse(user.getId(), user.getUsername(), user.getEmail(), finalRole);
     }
 
@@ -178,8 +196,12 @@ public class ProjectService {
                 throw new ProjectConflictException("Cannot remove the only manager of a project");
             }
         }
+        taskRepository.unassignUserFromProject(projectId, userId);
         project.removeMember(userId);
         projectRepository.save(project);
+        eventPublisher.publishEvent(new AuditEvent(
+                "MEMBER_REMOVED", "PROJECT", projectId, securityContext.getCurrentUserId(),
+                Map.of("memberId", userId.toString())));
     }
 
     @Transactional
@@ -200,6 +222,21 @@ public class ProjectService {
         }
         project.addMember(user, role);
         projectRepository.save(project);
+        eventPublisher.publishEvent(new AuditEvent(
+                "MEMBER_ROLE_CHANGED", "PROJECT", projectId, securityContext.getCurrentUserId(),
+                Map.of("memberId", userId.toString(), "username", user.getUsername(), "role", role.name())));
         return new ProjectMemberResponse(user.getId(), user.getUsername(), user.getEmail(), role);
+    }
+
+    private Map<String, Object> projectChanges(Project project) {
+        Map<String, Object> changes = new LinkedHashMap<>();
+        changes.put("name", project.getName());
+        if (project.getStatus() != null) {
+            changes.put("status", project.getStatus().name());
+        }
+        if (project.getPriority() != null) {
+            changes.put("priority", project.getPriority().name());
+        }
+        return changes;
     }
 }

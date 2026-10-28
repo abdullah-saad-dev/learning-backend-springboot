@@ -1,5 +1,6 @@
 package com.example.demo.tasks.service;
 
+import com.example.demo.audit.AuditEvent;
 import com.example.demo.auth.AppSecurityContext;
 import com.example.demo.auth.entity.User;
 import com.example.demo.auth.repository.UserRepository;
@@ -12,13 +13,16 @@ import com.example.demo.tasks.exceptions.InvalidAssigneeException;
 import com.example.demo.tasks.exceptions.TaskConflictException;
 import com.example.demo.tasks.exceptions.TaskNotFoundException;
 import com.example.demo.tasks.repository.TaskRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -30,14 +34,17 @@ public class TaskService {
     private final UserRepository userRepository;
     private final Clock clock;
     private final AppSecurityContext securityContext;
+    private final ApplicationEventPublisher eventPublisher;
 
     public TaskService(TaskRepository taskRepository, ProjectRepository projectRepository,
-                       UserRepository userRepository, Clock clock, AppSecurityContext securityContext) {
+                       UserRepository userRepository, Clock clock, AppSecurityContext securityContext,
+                       ApplicationEventPublisher eventPublisher) {
         this.taskRepository = taskRepository;
         this.projectRepository = projectRepository;
         this.userRepository = userRepository;
         this.clock = clock;
         this.securityContext = securityContext;
+        this.eventPublisher = eventPublisher;
     }
 
     public Task findById(UUID id) {
@@ -51,16 +58,18 @@ public class TaskService {
         Project project = projectRepository.findByIdAndUserId(projectId, userId)
                 .orElseThrow(() -> new ProjectNotFoundException("no project with id " + projectId));
 
-        Task task = Task.builder()
+        Task saved = taskRepository.save(Task.builder()
                 .project(project)
                 .title(title)
                 .details(details)
                 .createdAt(clock.instant())
                 .done(done)
                 .dueDate(dueDate)
-                .build();
-        task.setAssignee(resolveAssignee(projectId, assigneeId));
-        return taskRepository.save(task);
+                .assignee(resolveAssignee(projectId, assigneeId))
+                .build());
+        eventPublisher.publishEvent(new AuditEvent(
+                "TASK_CREATED", "TASK", saved.getId(), userId, taskChanges(saved)));
+        return saved;
     }
 
     @Transactional
@@ -75,7 +84,10 @@ public class TaskService {
         task.setDone(r.done());
         task.setDueDate(r.dueDate());
         task.setAssignee(resolveAssignee(task.getProject().getId(), r.assigneeId()));
-        return taskRepository.save(task);
+        Task saved = taskRepository.save(task);
+        eventPublisher.publishEvent(new AuditEvent(
+                "TASK_UPDATED", "TASK", saved.getId(), securityContext.getCurrentUserId(), taskChanges(saved)));
+        return saved;
     }
 
     /**
@@ -101,7 +113,10 @@ public class TaskService {
             throw new TaskConflictException(id, expectedVersion, task.getVersion());
         }
         task.setDone(done);
-        return taskRepository.save(task);
+        Task saved = taskRepository.save(task);
+        eventPublisher.publishEvent(new AuditEvent(
+                "TASK_STATUS_CHANGED", "TASK", saved.getId(), securityContext.getCurrentUserId(), taskChanges(saved)));
+        return saved;
     }
 
     @Transactional
@@ -117,7 +132,26 @@ public class TaskService {
         if (!Objects.equals(task.getVersion(), version)) {
             throw new TaskConflictException(id, version, task.getVersion());
         }
+        Map<String, Object> changes = taskChanges(task);
         taskRepository.delete(task);
+        eventPublisher.publishEvent(new AuditEvent(
+                "TASK_DELETED", "TASK", id, securityContext.getCurrentUserId(), changes));
+    }
+
+    private Map<String, Object> taskChanges(Task task) {
+        Map<String, Object> changes = new LinkedHashMap<>();
+        if (task.getProject() != null && task.getProject().getId() != null) {
+            changes.put("projectId", task.getProject().getId().toString());
+        }
+        changes.put("title", task.getTitle());
+        changes.put("done", task.isDone());
+        if (task.getDueDate() != null) {
+            changes.put("dueDate", task.getDueDate().toString());
+        }
+        if (task.getAssignee() != null && task.getAssignee().getId() != null) {
+            changes.put("assigneeId", task.getAssignee().getId().toString());
+        }
+        return changes;
     }
 
     private Task read(UUID id) {

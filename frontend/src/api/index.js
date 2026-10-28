@@ -149,8 +149,10 @@ export async function listMembers(projectId) {
 }
 
 /**
- * MOCK — needs GET /api/projects/{id}/activity
- * The audit_logs table (V8) already has these columns:
+ * REAL — GET /api/projects/{id}/activity
  * [{ id, action, entityType, entityId, actorId, changes, createdAt }]
  */
-export async function listActivity() { await wait(200); return []; }
+export async function listActivity(projectId) {
+  if (!USE_LIVE_API) { await wait(200); return []; }
+  return http(`/api/projects/${projectId}/activity`);
+}

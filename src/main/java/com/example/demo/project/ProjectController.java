@@ -1,5 +1,7 @@
 package com.example.demo.project;
 
+import com.example.demo.audit.AuditLogResponse;
+import com.example.demo.audit.AuditLogService;
 import com.example.demo.auth.AppSecurityContext;
 import com.example.demo.project.dtos.*;
 import com.example.demo.project.enums.ProjectPriority;
@@ -18,10 +20,13 @@ import java.util.UUID;
 public class ProjectController {
 
     private final ProjectService projectService;
+    private final AuditLogService auditLogService;
     private final AppSecurityContext securityContext;
 
-    public ProjectController(ProjectService projectService, AppSecurityContext securityContext) {
+    public ProjectController(ProjectService projectService, AuditLogService auditLogService,
+                             AppSecurityContext securityContext) {
         this.projectService = projectService;
+        this.auditLogService = auditLogService;
         this.securityContext = securityContext;
     }
 
@@ -86,6 +91,11 @@ public class ProjectController {
                                                                   @Valid @RequestBody UpdateProjectMemberRoleRequest r) {
         ProjectMemberResponse member = projectService.updateMemberRole(id, userId, r.role());
         return ResponseEntity.ok(member);
+    }
+
+    @GetMapping("/{id}/activity")
+    public List<AuditLogResponse> getActivity(@PathVariable("id") UUID id) {
+        return auditLogService.getProjectActivity(id);
     }
 
     private URI createUri(UUID id) {
