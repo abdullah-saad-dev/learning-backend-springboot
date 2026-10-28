@@ -36,8 +36,8 @@ public class RefreshTokenService {
 
     @Value("${app.refreshToken.absolute-expiration-days}")
     private int absoluteExpirationDays;
-    @Value("${app.refreshToken.ttl-days}")
-    private int refreshTokenTtlDays;
+    @Value("${app.refreshToken.ttl}")
+    private Duration refreshTokenTtl;
     @Value("${app.refreshToken.rotation-grace-seconds}")
     private int refreshTokenRotationGraceSeconds;
 
@@ -93,7 +93,7 @@ public class RefreshTokenService {
                         .tokenHash(hashToken(token))
                         .status(RefreshTokenStatus.ACTIVE)
                         .absoluteExpiresAt(now.plus(absoluteExpirationDays, ChronoUnit.DAYS))
-                        .expiresAt(now.plus(refreshTokenTtlDays, ChronoUnit.DAYS))
+                        .expiresAt(now.plus(refreshTokenTtl))
                         .tokenString(token)
                         .issuedAt(now)
                         .userId(user.getId())
@@ -142,7 +142,7 @@ public class RefreshTokenService {
         return RefreshToken.builder()
                 .tokenHash(newTokenHash)
                 .issuedAt(now)
-                .expiresAt(now.plus(refreshTokenTtlDays, ChronoUnit.DAYS))
+                .expiresAt(now.plus(refreshTokenTtl))
                 .absoluteExpiresAt(oldToken.getAbsoluteExpiresAt())
                 .familyId(oldToken.getFamilyId())
                 .userId(oldToken.getUserId())
@@ -152,23 +152,23 @@ public class RefreshTokenService {
     }
 
     private void diagnoseToken(RefreshToken token, Instant now) {
-        if (token.getExpiresAt().isBefore(now)
-                || token.getAbsoluteExpiresAt().isBefore(now)) {
+        Instant graceBoundary = now.minusSeconds(refreshTokenRotationGraceSeconds);
+        if (!token.getExpiresAt().isAfter(now)
+                || !token.getAbsoluteExpiresAt().isAfter(now)) {
             log.atDebug()
                     .setMessage("token expired")
                     .addKeyValue("familyId", token.getFamilyId())
                     .log();
             throw new InvalidRefreshTokenException("expired");
         } else if (token.getStatus() == RefreshTokenStatus.ROTATED
-                && token.getRotatedAt().isAfter(now.minusSeconds(refreshTokenRotationGraceSeconds))) {
+                && !token.getRotatedAt().isBefore(graceBoundary)) {
             log.atDebug()
                     .setMessage("concurrent refresh")
                     .addKeyValue("familyId", token.getFamilyId())
                     .addKeyValue("rotatedAgoSeconds", Duration.between(token.getRotatedAt(), now).toSeconds())
                     .log();
             throw new InvalidRefreshTokenException("benign concurrent refresh");
-        } else if (token.getStatus() == RefreshTokenStatus.ROTATED
-                && token.getRotatedAt().isBefore(now.minusSeconds(refreshTokenRotationGraceSeconds))) {
+        } else if (token.getStatus() == RefreshTokenStatus.ROTATED) {
             refreshTokenRepository.revokeFamily(token.getFamilyId());
             log.atWarn()
                     .setMessage("reuse detected")

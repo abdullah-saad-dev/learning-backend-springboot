@@ -13,6 +13,8 @@ import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Duration;
+
 @RequestMapping("/auth")
 @RestController
 public class AuthController {
@@ -27,8 +29,8 @@ public class AuthController {
     private static final String LEGACY_REFRESH_COOKIE_PATH = "/auth/refresh";
 
     private final AuthService authService;
-    @Value("${app.refreshToken.ttl-seconds}")
-    private int refreshTokenTtlSeconds;
+    @Value("${app.refreshToken.ttl}")
+    private Duration refreshTokenTtl;
 
     public AuthController(AuthService authService) {
         this.authService = authService;
@@ -89,7 +91,7 @@ public class AuthController {
 
     private ResponseEntity<JwtDetails> setCookieAndGetResponse(Tokens tokens) {
         ResponseCookie refreshTokenCookie =
-                refreshCookie(tokens.rawRefreshToken(), REFRESH_COOKIE_PATH, refreshTokenTtlSeconds);
+                refreshCookie(tokens.rawRefreshToken(), REFRESH_COOKIE_PATH, refreshTokenTtl.toSeconds());
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, refreshTokenCookie.toString())
                 .header(HttpHeaders.SET_COOKIE, expiredLegacyCookie().toString())
