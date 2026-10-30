@@ -5,6 +5,10 @@
 # Build output (the jar is produced inside the build stage)
 target/
 
+# Frontend workspace (built separately by frontend/Dockerfile)
+frontend/
+migration/
+
 # IDE / editor
 .idea/
 *.iml
