@@ -144,14 +144,21 @@ public class ProjectService {
     public Project update(UpdateProjectRequest r) {
         UUID userId = securityContext.getCurrentUserId();
         Project project = read(r.id());
+        if (r.version() != null && project.getVersion() != r.version()) {
+            throw new ProjectConflictException("the project changed while viewing, please refresh the page and try again");
+        }
         if (r.name() != null) project.setName(r.name());
         if (r.description() != null) project.setDescription(r.description());
         if (r.dueDate() != null) project.setDueDate(r.dueDate());
         if (r.startDate() != null) project.setStartDate(r.startDate());
         if (r.priority() != null) project.setPriority(r.priority());
         if (r.status() != null) project.setStatus(r.status());
+        if (project.getDueDate() != null && project.getStartDate() != null
+                && project.getDueDate().isBefore(project.getStartDate())) {
+            throw new IllegalArgumentException("Due date cannot be earlier than start date");
+        }
 
-        Project saved = projectRepository.save(project);
+        Project saved = projectRepository.saveAndFlush(project);
         eventPublisher.publishEvent(new AuditEvent(
                 "PROJECT_UPDATED", "PROJECT", saved.getId(), userId, projectChanges(saved)));
         log.atInfo()

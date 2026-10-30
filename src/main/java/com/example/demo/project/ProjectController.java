@@ -63,7 +63,7 @@ public class ProjectController {
     public ResponseEntity<ProjectResponse> update(@PathVariable("id") UUID id,
                                                   @Valid @RequestBody UpdateProjectRequest r) {
         UUID currentUserId = securityContext.getCurrentUserId();
-        UpdateProjectRequest normalized = r.id() != null ? r : new UpdateProjectRequest(
+        UpdateProjectRequest normalized = new UpdateProjectRequest(
                 id, r.name(), r.description(), r.priority(), r.status(), r.startDate(), r.dueDate(), r.version());
         ProjectResponse response = ProjectResponse.of(projectService.update(normalized), currentUserId);
         return ResponseEntity.ok().body(response);

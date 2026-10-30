@@ -15,6 +15,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder(toBuilder = true)
@@ -41,7 +42,6 @@ public class Project {
     @Column
     @Enumerated(EnumType.STRING)
     private ProjectPriority priority;
-
 
     @Builder.Default
     @ElementCollection(fetch = FetchType.EAGER)
@@ -97,7 +97,16 @@ public class Project {
         if (membersWithRole == null) {
             membersWithRole = new HashMap<>();
         }
-        membersWithRole.put(user, role != null ? role : ProjectRole.MEMBER);
+        ProjectRole finalRole = role != null ? role : ProjectRole.MEMBER;
+        if (user != null && user.getId() != null) {
+            for (Map.Entry<User, ProjectRole> entry : membersWithRole.entrySet()) {
+                if (user.getId().equals(entry.getKey().getId())) {
+                    entry.setValue(finalRole);
+                    return;
+                }
+            }
+        }
+        membersWithRole.put(user, finalRole);
     }
 
     public void removeMember(UUID userId) {
