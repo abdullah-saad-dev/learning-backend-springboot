@@ -1,9 +1,9 @@
 # Managable — Multi-Tenant Projects & Tasks Platform
 
-A full-stack Spring Boot + React workspace built around the parts that usually get hand-waved: **refresh-token theft detection that can tell an attacker from a second browser tab**, **multi-tenant project isolation (`404` across tenants, `403` within a project by role)**, optimistic locking that rejects stale writes instead of silently losing them, a database schema owned by SQL migrations (`V1`–`V12`) that every test run re-applies against real PostgreSQL, and structured logs where a security event is a queryable object rather than a sentence.
+A full-stack Spring Boot + React workspace built around the parts that usually get hand-waved: **refresh-token theft detection that can tell an attacker from a second browser tab**, **SMTP OTP email verification & hardened password policy**, **multi-tenant project isolation (`404` across tenants, `403` within a project by role)**, optimistic locking that rejects stale writes instead of silently losing them, paginated task queries, a database schema owned by SQL migrations (`V1`–`V14`) that every test run re-applies against real PostgreSQL, and structured logs where a security event is a queryable object rather than a sentence.
 
 **Java 25 · Spring Boot 4.0.6 · Spring Security 7 · PostgreSQL 18 · Flyway · JPA · Testcontainers · React 18 · Vite · Nginx · Docker**
-— 84 integration tests, all green.
+— 88 integration tests, all green.
 
 ---
 
@@ -24,7 +24,7 @@ Under `READ COMMITTED` the losing transaction blocks on the row lock, re-evaluat
 Reuse detection ends by throwing, which rolls the transaction back — so a same-transaction revoke would be undone and the attacker would keep a working session. `revokeFamily` runs `REQUIRES_NEW`, on the **repository** interface rather than the service, because `@Transactional` lives on a proxy outside the bean and a `this.method()` call silently skips it. [`SelfInvocationTransactionDemoTest`](src/test/java/com/example/demo/auth/SelfInvocationTransactionDemoTest.java) pins that with two byte-identical methods leaving `0` rows and `1`.
 
 **3. Tests run against real PostgreSQL, built by the real migration chain.**
-Testcontainers starts an empty Postgres 18; Flyway applies `V1`–`V12` exactly as it does in production, and `ddl-auto=validate` then checks every entity against the result. A column an entity expects and a migration forgets fails the build, not a deployment. No embedded stand-in reproduces `uuidv7()`, ICU collations, `JSONB` activity payloads, or `UPDATE ... WHERE version = ?` faithfully enough to be worth it.
+Testcontainers starts an empty Postgres 18; Flyway applies `V1`–`V14` exactly as it does in production, and `ddl-auto=validate` then checks every entity against the result. A column an entity expects and a migration forgets fails the build, not a deployment. No embedded stand-in reproduces `uuidv7()`, ICU collations, `JSONB` activity payloads, or `UPDATE ... WHERE version = ?` faithfully enough to be worth it.
 
 **4. Someone else's project or task is a `404`, not a `403`.**
 Cross-tenant access checks run in [`ProjectSecurity`](src/main/java/com/example/demo/project/ProjectSecurity.java) and [`TaskSecurity`](src/main/java/com/example/demo/tasks/TaskSecurity.java) before the controller executes: if the caller is not a member of the project, the security bean throws `ResourceNotFoundException` (`404 Not Found`), never `403 Forbidden`, preventing UUID enumeration across tenants. Once membership is established, role-based rules (`MANAGER` vs `MEMBER`) return `403 Forbidden` for in-project privilege boundaries.
@@ -46,7 +46,7 @@ docker compose up --build
 
 Compose starts three containers:
 1. **`postgres` (`:5433 -> :5432`)** — PostgreSQL 18 with a TCP `pg_isready` healthcheck and persistent `pgdata` volume.
-2. **`app` (`:8080`)** — Spring Boot API (defaults to `SPRING_PROFILES_ACTIVE=dev` in Compose so Flyway applies `V1`–`V12` plus the demo seed [`R__seed.sql`](src/main/resources/db/dev-migration/R__seed.sql)).
+2. **`app` (`:8080`)** — Spring Boot API (defaults to `SPRING_PROFILES_ACTIVE=dev` in Compose so Flyway applies `V1`–`V14` plus the demo seed [`R__seed.sql`](src/main/resources/db/dev-migration/R__seed.sql), and mounts `./secrets.env` for SMTP credentials).
 3. **`frontend` (`:5173 -> :80`)** — React SPA built with Node 22 and served by Nginx 1.27, which reverse-proxies `/api/` and `/auth/` to `http://app:8080` so the browser stays on one origin and sends the `SameSite=Strict` refresh cookie.
 
 | Service | URL | Notes |
@@ -78,27 +78,28 @@ npm run dev                     # http://localhost:5173
 </details>
 
 ```bash
-./mvnw test        # 81 tests; needs only a Docker daemon, no local database or credentials
+./mvnw test        # 88 tests; needs only a Docker daemon, no local database or credentials
 ```
 
 ---
 
 ## API
 
-### Auth
+### Auth & Profile
 
 | Method | Path | Presents | Success | Errors |
 |---|---|---|---|---|
-| `POST` | `/auth/otp/send` | `email` | 200 — generates & logs 6-digit OTP (`5m` TTL) | 400 · 409 duplicate email |
+| `POST` | `/auth/otp/send` | `email` | 200 — generates & sends 6-digit OTP via SMTP (`5m` TTL) | 400 · 409 duplicate email |
 | `POST` | `/auth/otp/verify` | `email`, `otp` (6 digits) | 200 — marks OTP verified | 400 invalid/expired OTP |
-| `POST` | `/auth/signup` | `username`, `email`, `password`, `otp?` | 200, empty body | 400 · 409 duplicate email/username |
+| `POST` | `/auth/signup` | `username`, `email`, `password` (`8–128` chars, $\ge 1$ digit, $\ge 1$ special char), `otp?` | 200, empty body | 400 · 409 duplicate email/username |
 | `POST` | `/auth/login` | `email`, `password` | 200 + `Set-Cookie` | 400 · 401 |
 | `POST` | `/auth/refresh` | `refreshToken` cookie | 200 + `Set-Cookie` | 400 no cookie · 401 |
 | `POST` | `/auth/logout` | `refreshToken` cookie | 204 + clears cookie | — (idempotent) |
 | `POST` | `/auth/logout-all` | Bearer token | 204 + clears cookie | 401 |
-| `GET` | `/auth/me` | Bearer token | 200 (`id`, `username`, `email`, `role`) | 401 |
+| `GET` | `/auth/me` | Bearer token | 200 (`id`, `username`, `email`, `role`, `avatarUrl`, `bio`, `createdAt`) | 401 |
+| `PUT` | `/auth/me` | `username`, `bio?`, `avatarUrl?` | 200 — updates profile details & photo | 400 · 401 |
 
-Both `login` and `refresh` return the short-lived access token in the JSON body and the refresh token in an `HttpOnly` cookie scoped to `Path=/auth/refresh`.
+Both `login` and `refresh` return the short-lived access token in the JSON body and the refresh token in an `HttpOnly` cookie scoped to `Path=/auth`.
 
 ### Projects
 
@@ -123,27 +124,29 @@ Every task belongs to a project (`projectId`) and has an optional `assigneeId` (
 
 | Method | Path | Role | Success | Errors |
 |---|---|---|---|---|
-| `GET` | `/api/tasks?title=&done=` | Member | 200 — tasks across all projects the caller belongs to | 400 |
+| `GET` | `/api/tasks?title=&done=&page=0&size=20` | Member | 200 — paginated `PagedModel` (`{ content, page }`) across all projects the caller belongs to | 400 |
 | `GET` | `/api/tasks/{id}` | Member | 200 | 404 |
 | `POST` | `/api/tasks` | Member | 201 + `Location` | 400 · 404 |
 | `PUT` | `/api/tasks/{id}` | Manager or Assignee | 200 — full update with optimistic locking | 400 · 403 · 404 · 409 |
 | `PATCH` | `/api/tasks/{id}/done` | Manager or Assignee | 200 — toggles `done` with `version` check | 400 · 403 · 404 · 409 |
 | `DELETE` | `/api/tasks/{id}?version=n` | Manager | 204 | 400 · 403 · 404 · 409 |
 
-### 5-Second Deletion Grace Period (UI)
+### Workspace UX Highlights
 
-Deleting a task from the Inspector or deleting a project from the Members sheet does not fire `DELETE` immediately:
-1. The item is optimistically removed from the workspace and a **5-second countdown toast** (`5s` $\rightarrow$ `1s`) appears with an **Undo** button and progress bar.
-2. Clicking **Undo** cancels the timer and restores the task (or the project and all its tasks) without touching the server.
-3. Once the 5-second grace window expires, the `DELETE` request is sent with the item's `version`; if the server rejects it (e.g., `409 Conflict`), the UI rolls back the deletion and surfaces the conflict.
+- **5-Second Deletion Grace Period with Undo:** Deleting a task or project optimistically removes it from the workspace and shows a 5-second countdown toast (`5s` $\rightarrow$ `1s`) with an **Undo** button and progress bar. Clicking **Undo** cancels the timer and restores the item locally without touching the server; otherwise, `DELETE` fires with the item's `version` when the timer expires.
+- **Sticky In-Place Task Completion & Accidental Click Recovery:** Marking a task as Done while viewing **Open** tasks keeps the task marked in its place so it can be immediately unmarked if clicked by accident; switching or re-opening the **Open** view filters completed tasks out. Rapid toggles on the same task are serialized per task so consecutive `PATCH /api/tasks/{id}/done` calls always pass the freshly bumped `version`.
+- **Profile Sheet & Photo Upload:** Users can open their profile from the account menu to inspect workspace statistics, edit their display name and bio, and upload/change/remove a profile photo (center-cropped and resized to `256×256` client-side).
 
 ---
 
 ## Design notes
 
-- **The schema is the source of truth (`V1`–`V12`).** `ddl-auto=validate` ensures Hibernate never creates or alters tables; it verifies entities against the Flyway schema at startup.
+- **The schema is the source of truth (`V1`–`V14`).** `ddl-auto=validate` ensures Hibernate never creates or alters tables; it verifies entities against the Flyway schema at startup.
   - `V1`–`V5`: `tasks`, `users` (UUIDv7 PK, ICU case-insensitive email), `refresh_tokens`, ownership backfill, and UUIDv7 task PKs.
   - `V6`–`V12`: `projects`, `projects_users` join table with per-project roles (`MANAGER`, `MEMBER`), task-to-project foreign keys, `username` on `users`, and `project_activity_logs` (`JSONB` change payloads).
+  - `V13`–`V14`: `email_verification_otps` (`5m` TTL OTP codes) and user profile fields (`avatar_url`, `bio`).
+- **Hardened password constraints.** `SignupRequest` enforces `8–128` characters with at least one number (`\d`) and one special character (`[^A-Za-z0-9\s]`), mirrored by a live requirement checklist in the signup UI.
+- **Paginated task queries.** `GET /api/tasks` uses Spring Data `Page<TaskResponse>` (`spring.data.web.pageable.serialization-mode=via-dto`, default size `20`, max `100`, ordered by `createdAt DESC`) with an explicit `countQuery`.
 - **Sole-manager invariant.** A project must always have at least one `MANAGER`. Demoting or removing the last manager throws `ProjectConflictException` (`409 Conflict`).
 - **Filter-chain `401` and `403` errors are RFC 7807 `application/problem+json`.** [`SecurityConfig`](src/main/java/com/example/demo/auth/config/SecurityConfig.java) delegates `AuthenticationEntryPoint` and `AccessDeniedHandler` to `HandlerExceptionResolver` so security errors share the exact same RFC 7807 envelope as controller exceptions.
 - **Dev vs. Prod logging hygiene.** SQL parameter bind logging (`org.hibernate.orm.jdbc.bind=TRACE`) and `DEBUG` logging live exclusively in [`application-dev.properties`](src/main/resources/application-dev.properties) so sensitive parameters (such as token or password hashes) are never logged in production.
@@ -154,18 +157,17 @@ Deleting a task from the Inspector or deleting a project from the Members sheet 
 
 | Suite | Tests | Scope |
 |---|---|---|
-| [`TaskApiTest`](src/test/java/com/example/demo/tasks/TaskApiTest.java) | 31 | HTTP contract via MockMvc — statuses, `problem+json`, optimistic locking, and multi-tenant/RBAC boundaries |
-| [`TaskRepositoryTest`](src/test/java/com/example/demo/tasks/repository/TaskRepositoryTest.java) | 16 | Repository queries and constraints through real committed transactions |
-| [`AuthApiTest`](src/test/java/com/example/demo/auth/AuthApiTest.java) | 18 | OTP send/verify, signup, login, `/auth/me`, `/auth/logout`, `/auth/logout-all`, duplicate email `409` |
+| [`TaskApiTest`](src/test/java/com/example/demo/tasks/TaskApiTest.java) | 32 | HTTP contract via MockMvc — statuses, pagination (`page`, `size`, `totalElements`, `totalPages`), `problem+json`, optimistic locking, and multi-tenant/RBAC boundaries |
+| [`TaskRepositoryTest`](src/test/java/com/example/demo/tasks/repository/TaskRepositoryTest.java) | 17 | Repository queries, pagination, and constraints through real committed transactions |
+| [`AuthApiTest`](src/test/java/com/example/demo/auth/AuthApiTest.java) | 21 | SMTP OTP send/verify, signup, password complexity validation, login, `GET` & `PUT /auth/me` profile/photo updates, `/auth/logout`, `/auth/logout-all`, duplicate email `409` |
 | [`RefreshApiTest`](src/test/java/com/example/demo/auth/RefreshApiTest.java) | 10 | Token rotation, two-tab grace window, theft detection, sliding vs. absolute expiry |
-| [`ProjectApiTest`](src/test/java/com/example/demo/project/ProjectApiTest.java) | 7 | Project lifecycle, date validation, `404` non-member isolation, `403` member RBAC, `409` version & sole-manager checks, activity logs |
+| [`ProjectApiTest`](src/test/java/com/example/demo/project/ProjectApiTest.java) | 6 | Project lifecycle, date validation, `404` non-member isolation, `403` member RBAC, `409` version & sole-manager checks, activity logs |
 | [`SelfInvocationTransactionDemoTest`](src/test/java/com/example/demo/auth/SelfInvocationTransactionDemoTest.java) | 1 | Proves `@Transactional(propagation = REQUIRES_NEW)` is bypassed on self-invocation |
-| [`Demo1ApplicationTests`](src/test/java/com/example/demo/Demo1ApplicationTests.java) | 1 | Context startup + Hibernate schema validation against all 12 Flyway migrations |
+| [`Demo1ApplicationTests`](src/test/java/com/example/demo/Demo1ApplicationTests.java) | 1 | Context startup + Hibernate schema validation against all 14 Flyway migrations |
 
 ---
 
 ## Future enhancements
 
-- **Password complexity policy:** Signup currently enforces `@NotBlank`; adding length/entropy rules would harden registration.
 - **Distributed lock on token sweep:** `SweepingService` is idempotent, but adding ShedLock or `pg_try_advisory_lock` avoids redundant sweeps across multiple replicas.
-- **Pagination:** List endpoints currently return full member-scoped lists; cursor or `Page` envelopes can be added as workspaces grow.
+- **Keyset (cursor) pagination:** For very deep pages (`OFFSET` > 10,000), adding cursor pagination on `(created_at, id)` avoids scanning skipped rows.
