@@ -37,14 +37,18 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile
+    volumes:
+      # Mounts local secrets.env (SMTP credentials, JWT secret) into /app/secrets.env
+      # so spring.config.import=optional:file:./secrets.env[.properties] loads it in Docker too.
+      - ./secrets.env:/app/secrets.env:ro
     environment:
       # "postgres" is the service name above; compose resolves it on the shared
       # network. ddl-auto=validate means startup fails loudly if the schema the
       # init scripts created does not match the entity.
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/task_api
       SPRING_DATASOURCE_USERNAME: task_api
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-task_api}
-      APP_JWT_SECRET: ${APP_JWT_SECRET}
       APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:5173}
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
     depends_on:

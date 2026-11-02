@@ -4,6 +4,7 @@ import com.example.demo.auth.AppSecurityContext;
 import com.example.demo.auth.AppUserDetails;
 import com.example.demo.auth.dto.Tokens;
 import com.example.demo.auth.dto.RotationResult;
+import com.example.demo.auth.dto.UpdateProfileRequest;
 import com.example.demo.auth.dto.UserProfileResponse;
 import com.example.demo.auth.entity.User;
 import com.example.demo.auth.exceptions.DuplicateEmailsException;
@@ -32,13 +33,15 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final Clock clock;
     private final AppSecurityContext securityContext;
+    private final MailVerificationService mailVerificationService;
 
     public AuthService(UserRepository userRepository,
                        JwtService jwtService,
                        AuthenticationManager authenticationManager,
                        RefreshTokenService refreshTokenService,
                        PasswordEncoder passwordEncoder, Clock clock,
-                       AppSecurityContext securityContext) {
+                       AppSecurityContext securityContext,
+                       MailVerificationService mailVerificationService) {
         this.userRepository = userRepository;
         this.jwtService = jwtService;
         this.authenticationManager = authenticationManager;
@@ -46,6 +49,7 @@ public class AuthService {
         this.passwordEncoder = passwordEncoder;
         this.clock = clock;
         this.securityContext = securityContext;
+        this.mailVerificationService = mailVerificationService;
     }
 
     public Tokens login(String email, String password) {
@@ -62,6 +66,7 @@ public class AuthService {
                 .log();
         return new Tokens(jwtService.getJwtDetails(accessToken), refreshToken);
     }
+
     public Tokens refresh(String rawToken) {
         RotationResult rotationResult = refreshTokenService.refresh(rawToken);
         String refreshToken = rotationResult.rawRefreshToken();
@@ -80,8 +85,25 @@ public class AuthService {
         String accessToken = jwtService.generateToken(user);
         return new Tokens(jwtService.getJwtDetails(accessToken), refreshToken);
     }
+
+    @Transactional
+    public String sendSignupOtp(String email) {
+        return mailVerificationService.sendOtp(email);
+    }
+
+    @Transactional
+    public void verifySignupOtp(String email, String otp) {
+        mailVerificationService.verifyOtp(email, otp);
+    }
+
     @Transactional
     public void signup(String email, String password, String username) {
+        signup(email, password, username, null);
+    }
+
+    @Transactional
+    public void signup(String email, String password, String username, String otp) {
+        mailVerificationService.verifyAndConsumeOnSignup(email, otp);
         try {
             User user = User.builder()
                     .email(email)
@@ -110,6 +132,22 @@ public class AuthService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UsernameNotFoundException("the signed-in user no longer exists"));
         return UserProfileResponse.of(user);
+    }
+
+    @Transactional
+    public UserProfileResponse updateMe(UpdateProfileRequest request) {
+        UUID userId = securityContext.getCurrentUserId();
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UsernameNotFoundException("the signed-in user no longer exists"));
+        user.setUsername(request.username().trim());
+        user.setBio(request.bio() != null && !request.bio().isBlank() ? request.bio().trim() : null);
+        user.setAvatarUrl(request.avatarUrl() != null && !request.avatarUrl().isBlank() ? request.avatarUrl().trim() : null);
+        User saved = userRepository.saveAndFlush(user);
+        log.atInfo()
+                .setMessage("user profile updated")
+                .addKeyValue("userId", saved.getId())
+                .log();
+        return UserProfileResponse.of(saved);
     }
 
     public void logout(String rawRefreshToken) {

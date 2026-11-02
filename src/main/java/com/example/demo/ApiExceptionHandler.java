@@ -1,6 +1,7 @@
 package com.example.demo;
 
 import com.example.demo.auth.exceptions.DuplicateEmailsException;
+import com.example.demo.auth.exceptions.InvalidOtpException;
 import com.example.demo.project.exceptions.ProjectConflictException;
 import com.example.demo.project.exceptions.ProjectNotFoundException;
 import com.example.demo.tasks.exceptions.InvalidAssigneeException;
@@ -61,6 +62,15 @@ public class ApiExceptionHandler {
                 .addKeyValue("error", ex.getMessage())
                 .log();
         return problem(HttpStatus.BAD_REQUEST, "Invalid assignee", ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidOtpException.class)
+    public ProblemDetail handle(InvalidOtpException ex) {
+        log.atDebug()
+                .setMessage("otp verification rejected")
+                .addKeyValue("error", ex.getMessage())
+                .log();
+        return problem(HttpStatus.BAD_REQUEST, "Invalid verification code", ex.getMessage());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

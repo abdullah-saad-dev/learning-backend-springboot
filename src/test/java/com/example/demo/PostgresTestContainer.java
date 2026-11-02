@@ -3,6 +3,10 @@ package com.example.demo;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 /**
@@ -27,5 +31,21 @@ public class PostgresTestContainer {
     @ServiceConnection
     PostgreSQLContainer<?> postgres() {
         return new PostgreSQLContainer<>("postgres:18-alpine");
+    }
+
+    @Bean
+    @Primary
+    JavaMailSender testMailSender() {
+        return new JavaMailSenderImpl() {
+            @Override
+            public void send(SimpleMailMessage simpleMessage) {
+                // No-op in automated tests so tests never open external SMTP connections
+            }
+
+            @Override
+            public void send(SimpleMailMessage... simpleMessages) {
+                // No-op in automated tests
+            }
+        };
     }
 }

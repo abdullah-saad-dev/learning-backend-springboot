@@ -5,6 +5,7 @@ import com.example.demo.PostgresTestContainer;
 import com.example.demo.auth.entity.User;
 import com.example.demo.auth.enums.Role;
 import com.example.demo.auth.repository.UserRepository;
+import com.example.demo.auth.service.MailVerificationService;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,6 +25,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -40,7 +42,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import({PostgresTestContainer.class, MockMvcSecurity.class})
 class AuthApiTest {
 
-    private static final String PASSWORD = "correct-horse-battery-staple";
+    private static final String PASSWORD = "correct-horse-battery-staple-1!";
     private static final String ACTIVE_EMAIL = "active@example.com";
     private static final String DISABLED_EMAIL = "disabled@example.com";
 
@@ -48,6 +50,8 @@ class AuthApiTest {
     private MockMvc mvc;
     @Autowired
     private UserRepository users;
+    @Autowired
+    private MailVerificationService mailVerificationService;
     @Autowired
     private PasswordEncoder passwordEncoder;
     @Autowired
@@ -61,7 +65,7 @@ class AuthApiTest {
     void seedUsers() {
         // CASCADE because refresh_tokens has an FK to users; a bare TRUNCATE is refused
         // outright rather than cascading by default.
-        jdbc.execute("truncate table users cascade");
+        jdbc.execute("truncate table email_verification_otps, users cascade");
         activeUserId = users.save(user(ACTIVE_EMAIL, true)).getId();
         users.save(user(DISABLED_EMAIL, false));
     }
@@ -78,7 +82,7 @@ class AuthApiTest {
                 .build();
     }
 
-    // ---------- signup ----------
+    // ---------- signup & OTP verification ----------
 
     @Test
     void signupCreatesAUsableAccount() throws Exception {
@@ -94,6 +98,102 @@ class AuthApiTest {
                                 {"email":"newbie@example.com","password":"%s"}""".formatted(PASSWORD)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").isNotEmpty());
+    }
+
+    @Test
+    void signupRejectsPasswordWithoutNumberOrSpecialChar() throws Exception {
+        // Missing a number
+        mvc.perform(post("/auth/signup").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"username":"weak1","email":"weak1@example.com","password":"NoNumbersHere!"}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+
+        // Missing a special character
+        mvc.perform(post("/auth/signup").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"username":"weak2","email":"weak2@example.com","password":"NoSpecialChar123"}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+    }
+
+    @Test
+    void otpSendVerifyAndSignupFlowWorksEndToEnd() throws Exception {
+        String email = "verified@example.com";
+        String otp = mailVerificationService.sendOtp(email);
+
+        mvc.perform(post("/auth/otp/verify").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"%s","otp":"%s"}""".formatted(email, otp)))
+                .andExpect(status().isOk());
+
+        mvc.perform(post("/auth/signup").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"username":"verified","email":"%s","password":"%s","otp":"%s"}"""
+                                .formatted(email, PASSWORD, otp)))
+                .andExpect(status().isOk());
+
+        mvc.perform(login(email, PASSWORD))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty());
+    }
+
+    @Test
+    void wrongOtpIsRejectedAndBlocksPendingSignup() throws Exception {
+        String email = "pending@example.com";
+        String realOtp = mailVerificationService.sendOtp(email);
+        String wrongOtp = realOtp.equals("000000") ? "999999" : "000000";
+
+        mvc.perform(post("/auth/otp/verify").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"%s","otp":"%s"}""".formatted(email, wrongOtp)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+
+        // Completing signup without verifying the pending OTP is also rejected
+        mvc.perform(post("/auth/signup").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"username":"pending","email":"%s","password":"%s"}"""
+                                .formatted(email, PASSWORD)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+    }
+
+    @Test
+    void sendOtpForAlreadyRegisteredEmailReturns409() throws Exception {
+        mvc.perform(post("/auth/otp/send").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"%s"}""".formatted(ACTIVE_EMAIL)))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+    }
+
+    @Test
+    void deliverOtpEmailUsesJavaMailSender() {
+        var captured = new java.util.concurrent.atomic.AtomicReference<org.springframework.mail.SimpleMailMessage>();
+        org.springframework.mail.javamail.JavaMailSender fakeSender = new org.springframework.mail.javamail.JavaMailSenderImpl() {
+            @Override
+            public void send(org.springframework.mail.SimpleMailMessage simpleMessage) {
+                captured.set(simpleMessage);
+            }
+        };
+
+        MailVerificationService smtpService = new MailVerificationService(
+                null,
+                users,
+                fakeSender,
+                java.time.Clock.systemUTC(),
+                java.time.Duration.ofMinutes(5),
+                "no-reply@managable.app"
+        );
+
+        smtpService.deliverOtpEmail("recipient@example.com", "654321", java.time.Instant.now().plusSeconds(300));
+
+        assertThat(captured.get()).isNotNull();
+        assertThat(captured.get().getFrom()).isEqualTo("no-reply@managable.app");
+        assertThat(captured.get().getTo()).containsExactly("recipient@example.com");
+        assertThat(captured.get().getSubject()).isEqualTo("Your Managable verification code");
+        assertThat(captured.get().getText()).contains("654321");
     }
 
     @Test
@@ -225,6 +325,27 @@ class AuthApiTest {
     void theIssuedTokenAuthenticatesAProtectedRequest() throws Exception {
         mvc.perform(get("/api/tasks").header("Authorization", "Bearer " + tokenFor(ACTIVE_EMAIL)))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void profileDetailsAndPhotoCanBeViewedAndUpdated() throws Exception {
+        String token = tokenFor(ACTIVE_EMAIL);
+
+        mvc.perform(get("/auth/me").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value(ACTIVE_EMAIL))
+                .andExpect(jsonPath("$.username").value("active"))
+                .andExpect(jsonPath("$.createdAt").isNotEmpty());
+
+        mvc.perform(put("/auth/me")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"username":"Active Updated","bio":"Product lead","avatarUrl":"data:image/jpeg;base64,/9j/4AAQ"}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value("Active Updated"))
+                .andExpect(jsonPath("$.bio").value("Product lead"))
+                .andExpect(jsonPath("$.avatarUrl").value("data:image/jpeg;base64,/9j/4AAQ"));
     }
 
     @Test

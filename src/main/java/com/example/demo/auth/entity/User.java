@@ -14,7 +14,7 @@ import java.util.UUID;
 @Setter
 @ToString
 @Entity
-@Table( name = "users")
+@Table(name = "users")
 @DynamicInsert
 @NoArgsConstructor
 @AllArgsConstructor
@@ -42,6 +42,13 @@ public class User {
     @Column(name = "role")
     @Enumerated(EnumType.STRING)
     private Role role;
+
+    @Column(name = "avatar_url")
+    @ToString.Exclude
+    private String avatarUrl;
+
+    @Column(name = "bio", length = 500)
+    private String bio;
 
     @Column(name = "created_at")
     private Instant createdAt;

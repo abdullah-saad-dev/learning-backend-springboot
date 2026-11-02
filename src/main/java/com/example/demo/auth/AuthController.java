@@ -1,11 +1,14 @@
 package com.example.demo.auth;
 
 import com.example.demo.auth.dto.JwtDetails;
+import com.example.demo.auth.dto.LoginRequest;
+import com.example.demo.auth.dto.SendOtpRequest;
 import com.example.demo.auth.dto.SignupRequest;
 import com.example.demo.auth.dto.Tokens;
+import com.example.demo.auth.dto.UpdateProfileRequest;
 import com.example.demo.auth.dto.UserProfileResponse;
+import com.example.demo.auth.dto.VerifyOtpRequest;
 import com.example.demo.auth.service.AuthService;
-import com.example.demo.auth.dto.LoginRequest;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -38,23 +41,42 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<JwtDetails> login(@Valid @RequestBody LoginRequest request) {
-        Tokens tokens =  authService.login(request.email(), request.password());
+        Tokens tokens = authService.login(request.email(), request.password());
         return setCookieAndGetResponse(tokens);
     }
+
     @PostMapping("/refresh")
     public ResponseEntity<JwtDetails> refresh(@CookieValue(REFRESH_COOKIE) String refreshToken) {
         Tokens tokens = authService.refresh(refreshToken);
         return setCookieAndGetResponse(tokens);
     }
+
+    @PostMapping("/otp/send")
+    public ResponseEntity<Void> sendOtp(@RequestBody @Valid SendOtpRequest request) {
+        authService.sendSignupOtp(request.email());
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/otp/verify")
+    public ResponseEntity<Void> verifyOtp(@RequestBody @Valid VerifyOtpRequest request) {
+        authService.verifySignupOtp(request.email(), request.otp());
+        return ResponseEntity.ok().build();
+    }
+
     @PostMapping("/signup")
     public ResponseEntity<Void> Signup(@RequestBody @Valid SignupRequest request) {
-        authService.signup(request.email(), request.password(),request.username());
+        authService.signup(request.email(), request.password(), request.username(), request.otp());
         return ResponseEntity.ok().build();
     }
 
     @GetMapping("/me")
     public UserProfileResponse me() {
         return authService.getMe();
+    }
+
+    @PutMapping("/me")
+    public UserProfileResponse updateMe(@RequestBody @Valid UpdateProfileRequest request) {
+        return authService.updateMe(request);
     }
 
     /**
