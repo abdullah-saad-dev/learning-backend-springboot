@@ -58,7 +58,7 @@ public class TaskService {
         Project project = projectRepository.findByIdAndUserId(projectId, userId)
                 .orElseThrow(() -> new ProjectNotFoundException("no project with id " + projectId));
 
-        Task saved = taskRepository.save(Task.builder()
+        Task saved = taskRepository.saveAndFlush(Task.builder()
                 .project(project)
                 .title(title)
                 .details(details)
@@ -84,7 +84,7 @@ public class TaskService {
         task.setDone(r.done());
         task.setDueDate(r.dueDate());
         task.setAssignee(resolveAssignee(task.getProject().getId(), r.assigneeId()));
-        Task saved = taskRepository.save(task);
+        Task saved = taskRepository.saveAndFlush(task);
         eventPublisher.publishEvent(new AuditEvent(
                 "TASK_UPDATED", "TASK", saved.getId(), securityContext.getCurrentUserId(), taskChanges(saved)));
         return saved;
@@ -113,7 +113,7 @@ public class TaskService {
             throw new TaskConflictException(id, expectedVersion, task.getVersion());
         }
         task.setDone(done);
-        Task saved = taskRepository.save(task);
+        Task saved = taskRepository.saveAndFlush(task);
         eventPublisher.publishEvent(new AuditEvent(
                 "TASK_STATUS_CHANGED", "TASK", saved.getId(), securityContext.getCurrentUserId(), taskChanges(saved)));
         return saved;

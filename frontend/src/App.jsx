@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { USE_LIVE_API } from './config.js';
 import * as api from './api/index.js';
 
@@ -12,8 +12,17 @@ import ConfirmSheet from './components/overlays/ConfirmSheet.jsx';
 import NewTaskSheet from './components/overlays/NewTaskSheet.jsx';
 import NewProjectSheet from './components/overlays/NewProjectSheet.jsx';
 import MembersSheet from './components/overlays/MembersSheet.jsx';
+import ProfileSheet from './components/overlays/ProfileSheet.jsx';
 
-function emptyCopyFor({ query, filter, view }) {
+const DELETE_GRACE_SECONDS = 5;
+
+function emptyCopyFor({ query, filter, view, hasProjects }) {
+  if (!hasProjects) {
+    return {
+      title: 'No projects yet',
+      body: 'Create your first project to start organizing and assigning tasks.'
+    };
+  }
   if (query) {
     return { title: 'No task matches that search',
              body: 'Try a shorter word, or clear the search to see the whole list.' };
@@ -43,17 +52,195 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(null);
   const [conflictOn, setConflictOn] = useState(null);
 
+  /**
+   * Tasks whose done-state was toggled during the current view/filter session stay
+   * visible in place (marked or unmarked) so an accidental press can be immediately
+   * undone in-place. Switching views or re-opening the filter tab clears this set.
+   */
+  const [stickyTaskIds, setStickyTaskIds] = useState(() => new Set());
+
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [confirmScope, setConfirmScope] = useState(null);
   const [toast, setToast] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
+
+  const toastTimerRef = useRef(null);
+  const pendingDeleteRef = useRef(null);
+  const tasksRef = useRef(tasks);
+  tasksRef.current = tasks;
+  const toggleChainsRef = useRef(new Map());
 
   const notify = useCallback((msg) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast(msg);
-    setTimeout(() => setToast(null), 2600);
+    toastTimerRef.current = setTimeout(() => setToast(null), 2600);
   }, []);
+
+  const clearPendingTimers = useCallback(() => {
+    const current = pendingDeleteRef.current;
+    if (current) {
+      if (current.timeoutId) clearTimeout(current.timeoutId);
+      if (current.intervalId) clearInterval(current.intervalId);
+    }
+  }, []);
+
+  const executeDelete = useCallback(async (entry) => {
+    if (!entry) return;
+    if (entry.type === 'task') {
+      const task = entry.item;
+      try {
+        await api.deleteTask(task.id, task.version);
+        notify('Task deleted.');
+      } catch (err) {
+        setTasks((all) => (all.some((t) => t.id === task.id) ? all : [task, ...all]));
+        if (err.conflict) {
+          setSelectedId(task.id);
+          setConflictOn(task.id);
+        } else {
+          notify(err.detail || 'Could not delete task.');
+        }
+      }
+    } else if (entry.type === 'project') {
+      const project = entry.item;
+      try {
+        await api.deleteProject(project.id, project.version ?? 0);
+        notify('Project deleted.');
+      } catch (err) {
+        setProjects((all) => (all.some((p) => p.id === project.id) ? all : [project, ...all]));
+        if (entry.removedTasks?.length) {
+          setTasks((all) => {
+            const existingIds = new Set(all.map((t) => t.id));
+            const restored = entry.removedTasks.filter((t) => !existingIds.has(t.id));
+            return [...restored, ...all];
+          });
+        }
+        setView({ type: 'project', id: project.id });
+        notify(err.detail || 'Could not delete project.');
+      }
+    }
+  }, [notify]);
+
+  const scheduleDeleteTask = useCallback((task) => {
+    if (pendingDeleteRef.current) {
+      const prev = pendingDeleteRef.current;
+      clearPendingTimers();
+      pendingDeleteRef.current = null;
+      setPendingDelete(null);
+      executeDelete(prev);
+    }
+
+    setTasks((all) => all.filter((t) => t.id !== task.id));
+    setSelectedId(null);
+
+    const entry = {
+      type: 'task',
+      item: task,
+      secondsLeft: DELETE_GRACE_SECONDS,
+      timeoutId: null,
+      intervalId: null
+    };
+
+    entry.intervalId = setInterval(() => {
+      setPendingDelete((curr) =>
+        curr && curr.item.id === task.id && curr.secondsLeft > 1
+          ? { ...curr, secondsLeft: curr.secondsLeft - 1 }
+          : curr
+      );
+    }, 1000);
+
+    entry.timeoutId = setTimeout(() => {
+      if (entry.intervalId) clearInterval(entry.intervalId);
+      pendingDeleteRef.current = null;
+      setPendingDelete(null);
+      executeDelete(entry);
+    }, DELETE_GRACE_SECONDS * 1000);
+
+    pendingDeleteRef.current = entry;
+    setPendingDelete({
+      type: 'task',
+      item: task,
+      secondsLeft: DELETE_GRACE_SECONDS
+    });
+  }, [clearPendingTimers, executeDelete]);
+
+  const scheduleDeleteProject = useCallback((project) => {
+    if (pendingDeleteRef.current) {
+      const prev = pendingDeleteRef.current;
+      clearPendingTimers();
+      pendingDeleteRef.current = null;
+      setPendingDelete(null);
+      executeDelete(prev);
+    }
+
+    const removedTasks = tasks.filter((t) => t.projectId === project.id);
+    setMembersOpen(false);
+    setProjects((all) => all.filter((p) => p.id !== project.id));
+    setTasks((all) => all.filter((t) => t.projectId !== project.id));
+    setView({ type: 'mine' });
+    setSelectedId(null);
+
+    const entry = {
+      type: 'project',
+      item: project,
+      removedTasks,
+      secondsLeft: DELETE_GRACE_SECONDS,
+      timeoutId: null,
+      intervalId: null
+    };
+
+    entry.intervalId = setInterval(() => {
+      setPendingDelete((curr) =>
+        curr && curr.item.id === project.id && curr.secondsLeft > 1
+          ? { ...curr, secondsLeft: curr.secondsLeft - 1 }
+          : curr
+      );
+    }, 1000);
+
+    entry.timeoutId = setTimeout(() => {
+      if (entry.intervalId) clearInterval(entry.intervalId);
+      pendingDeleteRef.current = null;
+      setPendingDelete(null);
+      executeDelete(entry);
+    }, DELETE_GRACE_SECONDS * 1000);
+
+    pendingDeleteRef.current = entry;
+    setPendingDelete({
+      type: 'project',
+      item: project,
+      secondsLeft: DELETE_GRACE_SECONDS
+    });
+  }, [tasks, clearPendingTimers, executeDelete]);
+
+  const undoPendingDelete = useCallback(() => {
+    const entry = pendingDeleteRef.current;
+    if (!entry) return;
+    clearPendingTimers();
+    pendingDeleteRef.current = null;
+    setPendingDelete(null);
+
+    if (entry.type === 'task') {
+      const task = entry.item;
+      setTasks((all) => (all.some((t) => t.id === task.id) ? all : [task, ...all]));
+      setSelectedId(task.id);
+      notify('Task deletion undone.');
+    } else if (entry.type === 'project') {
+      const project = entry.item;
+      setProjects((all) => (all.some((p) => p.id === project.id) ? all : [project, ...all]));
+      if (entry.removedTasks?.length) {
+        setTasks((all) => {
+          const existingIds = new Set(all.map((t) => t.id));
+          const restored = entry.removedTasks.filter((t) => !existingIds.has(t.id));
+          return [...restored, ...all];
+        });
+      }
+      setView({ type: 'project', id: project.id });
+      notify('Project deletion undone.');
+    }
+  }, [clearPendingTimers, notify]);
 
   // Attempt silent session restoration from the HttpOnly refresh cookie on initial load
   useEffect(() => {
@@ -116,41 +303,78 @@ export default function App() {
     let list = tasks;
     if (view.type === 'mine') list = list.filter((t) => t.assigneeId === me?.id);
     if (view.type === 'project') list = list.filter((t) => t.projectId === view.id);
-    if (filter === 'open') list = list.filter((t) => !t.done);
-    if (filter === 'done') list = list.filter((t) => t.done);
+    if (filter === 'open') list = list.filter((t) => !t.done || stickyTaskIds.has(t.id));
+    if (filter === 'done') list = list.filter((t) => t.done || stickyTaskIds.has(t.id));
     const needle = query.trim().toLowerCase();
     if (needle) list = list.filter((t) => t.title.toLowerCase().includes(needle));
     return list;
-  }, [tasks, view, filter, query, me]);
+  }, [tasks, view, filter, query, me, stickyTaskIds]);
 
   /**
-   * Optimistic toggle. The version rides along with the request; when the server
-   * responds we store the updated task (with its bumped version). A 409 means
-   * the row moved underneath us, so the change is rolled back and the inspector
-   * explains it instead of the edit vanishing silently.
+   * Optimistic toggle with per-task request serialization and in-place sticky visibility:
+   * - Keeping the toggled task ID in `stickyTaskIds` prevents the row from vanishing
+   *   immediately out of the "Open" or "Done" list, so the user sees it marked in its
+   *   place and can click again if they pressed it by accident.
+   * - Chaining requests per task ensures a fast double-click (mark -> unmark) uses the
+   *   server's bumped version from the first call instead of failing with a 409.
    */
-  const toggle = useCallback(async (task) => {
-    setTasks((all) => all.map((t) => (t.id === task.id ? { ...t, done: !t.done } : t)));
-    try {
-      const updated = await api.setDone(task.id, !task.done, task.version);
-      if (updated && typeof updated.version === 'number') {
-        setTasks((all) => all.map((t) => (t.id === task.id ? { ...t, ...updated } : t)));
+  const toggle = useCallback((task) => {
+    const nextDone = !task.done;
+    setStickyTaskIds((prev) => {
+      const next = new Set(prev);
+      next.add(task.id);
+      return next;
+    });
+    setTasks((all) => all.map((t) => (t.id === task.id ? { ...t, done: nextDone } : t)));
+
+    const prevChain = toggleChainsRef.current.get(task.id) || Promise.resolve();
+    const nextChain = prevChain.then(async () => {
+      const latest = tasksRef.current.find((t) => t.id === task.id);
+      const versionToUse = latest ? latest.version : task.version;
+      try {
+        const updated = await api.setDone(task.id, nextDone, versionToUse);
+        if (updated && typeof updated.version === 'number') {
+          setTasks((all) => all.map((t) => (t.id === task.id ? { ...t, ...updated } : t)));
+        }
+      } catch (err) {
+        setTasks((all) => all.map((t) => (t.id === task.id ? { ...t, done: !nextDone } : t)));
+        if (err.conflict) {
+          setSelectedId(task.id);
+          setConflictOn(task.id);
+        } else {
+          notify(err.detail || 'Could not save that change.');
+        }
       }
-    } catch (err) {
-      setTasks((all) => all.map((t) => (t.id === task.id ? { ...t, done: task.done } : t)));
-      if (err.conflict) {
-        setSelectedId(task.id);
-        setConflictOn(task.id);
-      } else {
-        notify(err.detail || 'Could not save that change.');
-      }
-    }
+    });
+    toggleChainsRef.current.set(task.id, nextChain);
   }, [notify]);
 
-  const goTo = useCallback((v) => { setView(v); setSelectedId(null); }, []);
+  const goTo = useCallback((v) => {
+    setView(v);
+    setSelectedId(null);
+    setStickyTaskIds(new Set());
+  }, []);
+
+  const handleFilterChange = useCallback((nextFilter) => {
+    setFilter(nextFilter);
+    setStickyTaskIds(new Set());
+  }, []);
+
+  const handleOpenNewTask = useCallback(() => {
+    if (projects.length === 0) {
+      notify('Create a project first to add tasks to it.');
+      setNewProjectOpen(true);
+      return;
+    }
+    setNewTaskOpen(true);
+  }, [projects.length, notify]);
 
   async function doLogout(scope) {
     setConfirmScope(null);
+    clearPendingTimers();
+    pendingDeleteRef.current = null;
+    setPendingDelete(null);
+    setStickyTaskIds(new Set());
     try {
       await (scope === 'all' ? api.logoutEverywhere() : api.logout());
     } catch {
@@ -184,7 +408,9 @@ export default function App() {
       <Rail
         me={me} projects={projects} tasks={tasks} view={view}
         onView={goTo}
+        onNewTask={handleOpenNewTask}
         onNewProject={() => setNewProjectOpen(true)}
+        onOpenProfile={() => setProfileOpen(true)}
         onLogout={setConfirmScope}
       />
 
@@ -192,8 +418,9 @@ export default function App() {
         <TopBar
           heading={heading} project={activeProject}
           query={query} onQuery={setQuery}
-          filter={filter} onFilter={setFilter}
-          onNewTask={projects.length > 0 ? () => setNewTaskOpen(true) : null}
+          filter={filter} onFilter={handleFilterChange}
+          onNewTask={handleOpenNewTask}
+          onNewProject={() => setNewProjectOpen(true)}
           onOpenMembers={activeProject ? () => setMembersOpen(true) : null}
         />
 
@@ -202,7 +429,9 @@ export default function App() {
             tasks={visible} projects={projects} selected={selected}
             onSelect={(t) => { setSelectedId(t.id); setConflictOn(null); }}
             onToggle={toggle}
-            emptyFor={emptyCopyFor({ query, filter, view })}
+            onNewTask={handleOpenNewTask}
+            onNewProject={() => setNewProjectOpen(true)}
+            emptyFor={emptyCopyFor({ query, filter, view, hasProjects: projects.length > 0 })}
           />
 
           {selected && (
@@ -212,6 +441,7 @@ export default function App() {
               me={me}
               conflict={conflictOn === selected.id}
               onConflict={(id) => setConflictOn(id)}
+              onToggle={toggle}
               onResolve={async () => {
                 await reloadData();
                 setConflictOn(null);
@@ -221,11 +451,7 @@ export default function App() {
                 setTasks((all) => all.map((t) => (t.id === updated.id ? updated : t)));
                 notify('Task saved.');
               }}
-              onDeleted={(id) => {
-                setTasks((all) => all.filter((t) => t.id !== id));
-                setSelectedId(null);
-                notify('Task deleted.');
-              }}
+              onDeleted={scheduleDeleteTask}
               onClose={() => { setSelectedId(null); setConflictOn(null); }}
             />
           )}
@@ -237,7 +463,7 @@ export default function App() {
           projects={projects}
           onClose={() => setPaletteOpen(false)}
           onView={goTo}
-          onNewTask={projects.length > 0 ? () => setNewTaskOpen(true) : null}
+          onNewTask={handleOpenNewTask}
           onNewProject={() => setNewProjectOpen(true)}
           onLogout={setConfirmScope}
         />
@@ -265,6 +491,7 @@ export default function App() {
             setNewProjectOpen(false);
             setView({ type: 'project', id: created.id });
             setSelectedId(null);
+            setStickyTaskIds(new Set());
             notify('Project created.');
           }}
         />
@@ -276,13 +503,20 @@ export default function App() {
           me={me}
           onClose={() => setMembersOpen(false)}
           onChanged={() => { reloadData(); }}
-          onDeleted={(deletedId) => {
-            setMembersOpen(false);
-            setProjects((all) => all.filter((p) => p.id !== deletedId));
-            setTasks((all) => all.filter((t) => t.projectId !== deletedId));
-            setView({ type: 'mine' });
-            setSelectedId(null);
-            notify('Project deleted.');
+          onDeleted={scheduleDeleteProject}
+        />
+      )}
+
+      {profileOpen && (
+        <ProfileSheet
+          me={me}
+          projects={projects}
+          tasks={tasks}
+          onClose={() => setProfileOpen(false)}
+          onSaved={(updatedMe) => {
+            setMe(updatedMe);
+            setProfileOpen(false);
+            notify('Profile updated.');
           }}
         />
       )}
@@ -295,7 +529,20 @@ export default function App() {
         />
       )}
 
-      {toast && <div className="toast" role="status">{toast}</div>}
+      {pendingDelete ? (
+        <div className="toast toast-undo" role="status" aria-live="polite">
+          <span>
+            Deleting {pendingDelete.type} <b>“{pendingDelete.item.title || pendingDelete.item.name}”</b>
+          </span>
+          <span className="toast-timer">{pendingDelete.secondsLeft}s</span>
+          <button type="button" className="toast-btn" onClick={undoPendingDelete}>
+            Undo
+          </button>
+          <span key={pendingDelete.item.id} className="toast-bar" />
+        </div>
+      ) : (
+        toast && <div className="toast" role="status">{toast}</div>
+      )}
 
       {/* Only while the data is fake. It disappears on its own when the flag flips. */}
       {!USE_LIVE_API && (

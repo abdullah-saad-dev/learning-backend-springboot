@@ -9,7 +9,17 @@ import AccountMenu from './AccountMenu.jsx';
  * Projects are grouped by role rather than sorted into one list, because the
  * grouping is the answer to the question the colour code raises.
  */
-export default function Rail({ me, projects, tasks, view, onView, onNewProject, onLogout }) {
+export default function Rail({
+  me,
+  projects,
+  tasks,
+  view,
+  onView,
+  onNewTask,
+  onNewProject,
+  onOpenProfile,
+  onLogout
+}) {
   const led = projects.filter((p) => p.role === 'LEADER' || p.role === 'MANAGER');
   const joined = projects.filter((p) => p.role !== 'LEADER' && p.role !== 'MANAGER');
 
@@ -24,20 +34,26 @@ export default function Rail({ me, projects, tasks, view, onView, onNewProject, 
 
       <div className="rail-head">
         <div className="wordmark"><i />{PRODUCT}</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          {onNewProject && (
-            <button
-              type="button"
-              className="kbd"
-              style={{ cursor: 'pointer' }}
-              onClick={onNewProject}
-              title="Create a new project"
-            >
-              + Project
-            </button>
-          )}
-          <span className="kbd">⌘K</span>
-        </div>
+        <span className="kbd" title="Command palette (Ctrl+K)">⌘K</span>
+      </div>
+
+      <div className="rail-actions">
+        <button
+          type="button"
+          className="btn btn-cta"
+          onClick={onNewTask}
+          title="Create a new task"
+        >
+          + New task
+        </button>
+        <button
+          type="button"
+          className="btn btn-cta-outline"
+          onClick={onNewProject}
+          title="Create a new project"
+        >
+          + Project
+        </button>
       </div>
 
       <div className="rail-scroll">
@@ -54,12 +70,13 @@ export default function Rail({ me, projects, tasks, view, onView, onNewProject, 
         </button>
 
         <ProjectGroup label="You lead" projects={led} view={view}
-                      openCountFor={openCountFor} onView={onView} />
+                      openCountFor={openCountFor} onView={onView}
+                      onNewProject={onNewProject} />
         <ProjectGroup label="You are in" projects={joined} view={view}
                       openCountFor={openCountFor} onView={onView} />
       </div>
 
-      <AccountMenu me={me} onLogout={onLogout} />
+      <AccountMenu me={me} onOpenProfile={onOpenProfile} onLogout={onLogout} />
     </nav>
   );
 }

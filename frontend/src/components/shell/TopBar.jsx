@@ -14,6 +14,7 @@ export default function TopBar({
   filter,
   onFilter,
   onNewTask,
+  onNewProject,
   onOpenMembers
 }) {
   return (
@@ -60,16 +61,29 @@ export default function TopBar({
         ))}
       </div>
 
-      {onNewTask && (
-        <button
-          type="button"
-          className="btn btn-ghost"
-          style={{ padding: '6px 11px', fontSize: '12.5px', flex: 'none' }}
-          onClick={onNewTask}
-        >
-          + New task
-        </button>
-      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 'none' }}>
+        {onNewProject && (
+          <button
+            type="button"
+            className="btn btn-cta-outline"
+            style={{ padding: '7px 12px', fontSize: '12.5px' }}
+            onClick={onNewProject}
+          >
+            + New project
+          </button>
+        )}
+
+        {onNewTask && (
+          <button
+            type="button"
+            className="btn btn-cta"
+            style={{ padding: '7px 13px', fontSize: '12.5px' }}
+            onClick={onNewTask}
+          >
+            + New task
+          </button>
+        )}
+      </div>
     </header>
   );
 }

@@ -24,12 +24,30 @@ export async function login(email, password) {
   return me();
 }
 
+/** REAL — POST /auth/otp/send → 200, sends a 6-digit OTP to the prospective email. */
+export async function sendSignupOtp(email) {
+  if (!USE_LIVE_API) { await wait(300); return null; }
+  return http('/auth/otp/send', {
+    method: 'POST',
+    body: JSON.stringify({ email })
+  });
+}
+
+/** REAL — POST /auth/otp/verify → 200, validates the 6-digit OTP before completing signup. */
+export async function verifySignupOtp(email, otp) {
+  if (!USE_LIVE_API) { await wait(300); return null; }
+  return http('/auth/otp/verify', {
+    method: 'POST',
+    body: JSON.stringify({ email, otp })
+  });
+}
+
 /** REAL — POST /auth/signup → 200, empty body. 409 means the email is taken. */
-export async function signup(username, email, password) {
+export async function signup(username, email, password, otp) {
   if (!USE_LIVE_API) { await wait(520); return clone(FIXTURES.me); }
   await http('/auth/signup', {
     method: 'POST',
-    body: JSON.stringify({ username, email, password })
+    body: JSON.stringify({ username, email, password, otp })
   });
   return login(email, password);
 }
@@ -42,10 +60,22 @@ export async function refresh() {
   return me();
 }
 
-/** REAL — GET /auth/me → { id, username, email, role } */
+/** REAL — GET /auth/me → { id, username, email, role, avatarUrl, bio, createdAt } */
 export async function me() {
   if (!USE_LIVE_API) { await wait(120); return clone(FIXTURES.me); }
   return http('/auth/me');
+}
+
+/** REAL — PUT /auth/me → { id, username, email, role, avatarUrl, bio, createdAt } */
+export async function updateProfile(body) {
+  if (!USE_LIVE_API) {
+    await wait(200);
+    return { ...clone(FIXTURES.me), ...body };
+  }
+  return http('/auth/me', {
+    method: 'PUT',
+    body: JSON.stringify(body)
+  });
 }
 
 /**

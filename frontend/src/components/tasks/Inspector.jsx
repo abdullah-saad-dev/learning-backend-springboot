@@ -37,6 +37,7 @@ export default function Inspector({
   conflict,
   onResolve,
   onClose,
+  onToggle,
   onUpdated,
   onDeleted,
   onConflict
@@ -110,20 +111,9 @@ export default function Inspector({
     }
   }
 
-  async function handleDelete() {
+  function handleDelete() {
     setError(null);
-    setSaving(true);
-    try {
-      await api.deleteTask(task.id, task.version);
-      onDeleted(task.id);
-    } catch (err) {
-      if (err.conflict) {
-        onConflict(task.id);
-      } else {
-        setError(err.detail || 'Could not delete task.');
-      }
-      setSaving(false);
-    }
+    onDeleted(task);
   }
 
   const overdue = !task.done && daysFrom(task.dueDate) !== null && daysFrom(task.dueDate) < 0;
@@ -246,7 +236,19 @@ export default function Inspector({
           </dd>
 
           <dt>Status</dt>
-          <dd>{task.done ? 'Done' : 'Open'}</dd>
+          <dd style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+            <span>{task.done ? 'Done' : 'Open'}</span>
+            {canEdit && onToggle && (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ padding: '3px 8px', fontSize: '11.5px' }}
+                onClick={() => onToggle(task)}
+              >
+                {task.done ? 'Mark open' : 'Mark done'}
+              </button>
+            )}
+          </dd>
 
           <dt>Due</dt>
           <dd className={overdue ? 'tdate over' : ''}>{dueLabel(task.dueDate)}</dd>

@@ -7,12 +7,24 @@ import { roleClass, isSolo } from '../../lib/roles.js';
  * is the role; the count is open work; "solo" replaces the count because in a
  * one-person project the number says less than the fact.
  */
-export default function ProjectGroup({ label, projects, view, openCountFor, onView }) {
+export default function ProjectGroup({ label, projects, view, openCountFor, onView, onNewProject }) {
   return (
     <div className="group">
       <div className="group-head">
         <span className="mono">{label}</span>
-        <span className="mono">{projects.length}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {onNewProject && (
+            <button
+              type="button"
+              className="group-add-btn"
+              onClick={onNewProject}
+              title="Create a new project"
+            >
+              + New
+            </button>
+          )}
+          <span className="mono">{projects.length}</span>
+        </div>
       </div>
 
       <div className="plist">
