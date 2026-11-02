@@ -1,5 +1,5 @@
 /** Product name. Change it here and it changes everywhere. */
-export const PRODUCT = 'Keel';
+export const PRODUCT = 'Managable';
 
 /**
  * false → every API call resolves from src/api/fixtures.js.

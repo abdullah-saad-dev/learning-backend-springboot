@@ -61,16 +61,9 @@ export default function MembersSheet({ project, me, onClose, onChanged, onDelete
     }
   }
 
-  async function handleDeleteProject() {
+  function handleDeleteProject() {
     setError(null);
-    setBusy(true);
-    try {
-      await api.deleteProject(project.id, project.version ?? 0);
-      onDeleted(project.id);
-    } catch (err) {
-      setError(err.detail || 'Could not delete project.');
-      setBusy(false);
-    }
+    onDeleted(project);
   }
 
   return (

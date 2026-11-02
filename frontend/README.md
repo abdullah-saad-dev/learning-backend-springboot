@@ -1,6 +1,8 @@
-# Keel — frontend
+# Managable — Frontend
 
-React + Vite. Currently runs on mock data; the backend is not wired up yet.
+React 18 + Vite single-page application for the multi-tenant Projects & Tasks platform. Connected to the live Spring Boot API (`USE_LIVE_API = true`).
+
+## Running locally (development)
 
 ```bash
 cd frontend
@@ -8,66 +10,46 @@ npm install
 npm run dev        # http://localhost:5173
 ```
 
-## Going live
+In development, [`vite.config.js`](vite.config.js) proxies `/api` and `/auth` to `http://localhost:8080`. Because the browser only talks to `localhost:5173`, requests stay same-origin and the `SameSite=Strict` `HttpOnly` refresh cookie is sent automatically on `/auth/refresh`.
 
-`src/config.js` holds one flag:
+## Running in Docker (production build)
 
-```js
-export const USE_LIVE_API = false;
+From the repository root:
+
+```bash
+docker compose up --build
 ```
 
-Flip it and every call in `src/api/index.js` marked **REAL** starts hitting Spring
-Boot through the Vite proxy — no CORS configuration, and the `SameSite=Strict`
-refresh cookie is sent because the browser stays on one origin.
+[`frontend/Dockerfile`](Dockerfile) performs a two-stage build:
+1. **`node:22-alpine` (`build`)** — runs `npm ci && npm run build` to produce static assets in `/app/dist`.
+2. **`nginx:1.27-alpine` (`runtime`)** — serves `/usr/share/nginx/html` with SPA history fallback and reverse-proxies `/api/` and `/auth/` to `http://app:8080` via [`nginx.conf`](nginx.conf).
 
-Calls marked **MOCK** need endpoints that do not exist yet. Each one names the
-route it is waiting for and the JSON it expects back:
+## Key Features
 
-| Missing endpoint | Feeds |
-|---|---|
-| `GET /auth/me` | the signed-in name and email in the rail |
-| `GET /auth/sessions` | the active-sessions sheet |
-| `POST /auth/logout`, `POST /auth/logout-all` | both log-out actions |
-| `GET /api/projects` | the whole project menu and the gold/blue split |
-| `GET /api/projects/{id}/members` | the solo auto-assign rule |
-| `GET /api/projects/{id}/activity` | the Activity panel (`audit_logs`) |
-
-**`GET /api/tasks` is the blocker even though it exists.** `TaskResponse` carries
-no `projectId`, no assignee and no due date, and the UI needs all three. Until
-they are on the response, tasks cannot come from the live API either.
+- **Silent Session Restoration & Auto-Refresh:** On boot, [`App.jsx`](src/App.jsx) calls `POST /auth/refresh` using the `HttpOnly` cookie to restore the session and populate `GET /auth/me`. Any `401` on an authenticated call transparently refreshes the access token once before retrying ([`src/api/client.js`](src/api/client.js)).
+- **Role-Driven Workspace:** Gold denotes projects you lead (`MANAGER`); blue denotes projects where you are a `MEMBER`. Solo projects (1 member) automatically lock task assignment to the creator.
+- **Optimistic Locking & Conflict Resolution:** Task toggles, task edits, and project deletions carry the entity's `version`. A `409 Conflict` rolls back the optimistic state and renders a reconciliation strip in [`Inspector.jsx`](src/components/tasks/Inspector.jsx) so edits are never silently overwritten.
+- **5-Second Deletion Grace Period with Undo:** Deleting a task or project optimistically removes it from the view and starts a 5-second countdown toast (`5s` $\rightarrow$ `1s`) with an **Undo** button and progress bar. The `DELETE` HTTP request is only sent after the 5-second grace window expires.
+- **Project & Member Management:** Create projects ([`NewProjectSheet.jsx`](src/components/overlays/NewProjectSheet.jsx)), create tasks ([`NewTaskSheet.jsx`](src/components/overlays/NewTaskSheet.jsx)), manage project members and roles ([`MembersSheet.jsx`](src/components/overlays/MembersSheet.jsx)), and inspect per-project audit history (`GET /api/projects/{id}/activity`).
 
 ## Layout
 
-```
+```text
 src/
-  config.js              product name + the live/mock flag
-  App.jsx                state, routing between views, the one place effects live
+  config.js              product name + USE_LIVE_API flag
+  App.jsx                workspace state, routing, optimistic toggle, 5s delete grace timer
   api/
-    client.js            fetch, auth header, 409 → conflict
-    index.js             every call, each marked REAL or MOCK
-    fixtures.js          sample data — delete when USE_LIVE_API is true
+    client.js            fetch wrapper, Bearer token injection, 401 refresh retry, 409 conflict flag
+    index.js             auth, project, member, activity, and task API functions
+    fixtures.js          offline prototype fixtures (used only when USE_LIVE_API is false)
   lib/
-    dates.js             due labels, overdue
-    roles.js             LEADER → gold, MEMBER → blue, solo
+    dates.js             due-date labels and overdue calculations
+    roles.js             MANAGER → gold, MEMBER → blue, solo-project detection
   components/
     Icon.jsx  Stub.jsx
     auth/     AuthScreen
     shell/    Rail, ProjectGroup, AccountMenu, TopBar
     tasks/    TaskList, TaskRow, Inspector
-    overlays/ Palette, SessionsSheet, ConfirmSheet
+    overlays/ Palette, ConfirmSheet, NewTaskSheet, NewProjectSheet, MembersSheet
   styles/                base, spine, auth, shell, overlays, responsive
 ```
-
-CSS is split by area rather than per component, and all breakpoints live
-together in `responsive.css` so they can be read against each other.
-
-## The design
-
-Role is the organising idea. Gold means you lead a project, blue means you are
-a member, and neither colour is ever used for decoration. Both hang off *the
-spine* — one hairline that appears at the same offset on every screen: on the
-auth page the legend sits on it, in the app it runs down the rail and every
-project puts a notch on it.
-
-Type: Familjen Grotesk for display, IBM Plex Sans for the interface, IBM Plex
-Mono for data (dates, versions, statuses).

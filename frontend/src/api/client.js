@@ -51,6 +51,8 @@ export async function http(path, options = {}, retried = false) {
     !retried &&
     path !== '/auth/login' &&
     path !== '/auth/signup' &&
+    path !== '/auth/otp/send' &&
+    path !== '/auth/otp/verify' &&
     path !== '/auth/refresh' &&
     path !== '/auth/logout'
   ) {
