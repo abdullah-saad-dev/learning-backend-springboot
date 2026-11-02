@@ -1,6 +1,9 @@
 package com.example.demo.tasks.repository;
 
 import com.example.demo.tasks.entity.Task;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -15,14 +18,28 @@ import java.util.UUID;
 @Repository
 public interface TaskRepository extends JpaRepository<Task, UUID> {
     // hibernate infers the type directly from the column but not from functions output
-    @Query("""
-    select t from Task as t join t.project.membersWithRole as pu
-        where key(pu).id = :userId
-        and (cast(:title as String) is null or upper(t.title) = upper(cast(:title as String)))
-        and (:done is null or t.done = :done)           
-        order by t.createdAt desc       
-    """)
-    List<Task> search(@Param("userId") UUID userId, @Param("title") String title, @Param("done") Boolean done);
+    @Query(
+            value = """
+            select t from Task as t join t.project.membersWithRole as pu
+                where key(pu).id = :userId
+                and (cast(:title as String) is null or upper(t.title) = upper(cast(:title as String)))
+                and (:done is null or t.done = :done)
+            """,
+            countQuery = """
+            select count(t) from Task as t join t.project.membersWithRole as pu
+                where key(pu).id = :userId
+                and (cast(:title as String) is null or upper(t.title) = upper(cast(:title as String)))
+                and (:done is null or t.done = :done)
+            """
+    )
+    Page<Task> search(@Param("userId") UUID userId,
+                      @Param("title") String title,
+                      @Param("done") Boolean done,
+                      Pageable pageable);
+
+    default List<Task> search(UUID userId, String title, Boolean done) {
+        return search(userId, title, done, Pageable.unpaged(Sort.by(Sort.Direction.DESC, "createdAt"))).getContent();
+    }
 
     // Backed by idx_tasks_assignee_id (V12).
     @Query("""

@@ -107,17 +107,50 @@ export async function logoutEverywhere() {
 /* ── Tasks ──────────────────────────────────────────────────────────── */
 
 /**
- * REAL — GET /api/tasks?title=&done=
- * Returns [{ id, projectId, title, details, dueDate, assigneeId, createdAt,
- *            done, version }] for every project the caller belongs to.
+ * REAL — GET /api/tasks?title=&done=&page=&size=
+ * Returns a Spring Data Page { content: [...], page: { size, number, totalElements, totalPages } }.
  */
-export async function listTasks({ title, done } = {}) {
-  if (!USE_LIVE_API) { await wait(260); return clone(FIXTURES.tasks); }
+export async function listTasksPage({ title, done, page = 0, size = 20 } = {}) {
+  if (!USE_LIVE_API) {
+    await wait(260);
+    const all = clone(FIXTURES.tasks);
+    const start = page * size;
+    const slice = all.slice(start, start + size);
+    return {
+      content: slice,
+      page: {
+        size,
+        number: page,
+        totalElements: all.length,
+        totalPages: Math.max(1, Math.ceil(all.length / size))
+      }
+    };
+  }
   const q = new URLSearchParams();
   if (title) q.set('title', title);
   if (done !== undefined && done !== null) q.set('done', String(done));
-  const qs = q.toString();
-  return http(qs ? `/api/tasks?${qs}` : '/api/tasks');
+  q.set('page', String(page));
+  q.set('size', String(size));
+  return http(`/api/tasks?${q.toString()}`);
+}
+
+/**
+ * REAL — GET /api/tasks
+ * Fetches all pages (up to 100 per page) and returns the flat array of tasks
+ * [{ id, projectId, title, details, dueDate, assigneeId, createdAt, done, version }]
+ * for every project the caller belongs to.
+ */
+export async function listTasks({ title, done } = {}) {
+  if (!USE_LIVE_API) { await wait(260); return clone(FIXTURES.tasks); }
+  const first = await listTasksPage({ title, done, page: 0, size: 100 });
+  if (Array.isArray(first)) return first;
+  const items = [...(first?.content || [])];
+  const totalPages = first?.page?.totalPages ?? 1;
+  for (let p = 1; p < totalPages; p += 1) {
+    const next = await listTasksPage({ title, done, page: p, size: 100 });
+    if (next?.content?.length) items.push(...next.content);
+  }
+  return items;
 }
 
 /**

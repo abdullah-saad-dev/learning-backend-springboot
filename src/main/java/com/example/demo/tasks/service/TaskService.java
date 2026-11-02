@@ -14,6 +14,8 @@ import com.example.demo.tasks.exceptions.TaskConflictException;
 import com.example.demo.tasks.exceptions.TaskNotFoundException;
 import com.example.demo.tasks.repository.TaskRepository;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -162,5 +164,11 @@ public class TaskService {
     public List<Task> search(String title, Boolean done) {
         UUID userId = securityContext.getCurrentUserId();
         return taskRepository.search(userId, title, done);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<Task> search(String title, Boolean done, Pageable pageable) {
+        UUID userId = securityContext.getCurrentUserId();
+        return taskRepository.search(userId, title, done, pageable);
     }
 }

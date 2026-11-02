@@ -8,6 +8,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -258,6 +261,25 @@ class TaskRepositoryTest {
         tx.execute(s -> repository.save(task(ALICE, "fresh", true, now)));
 
         assertEquals(List.of("fresh", "stale"), titles(tx.execute(s -> repository.search(ALICE, null, true))));
+    }
+
+    @Test
+    void searchSupportsPagination() {
+        Instant now = Instant.now();
+        tx.execute(s -> repository.save(task(ALICE, "oldest", false, now.minus(2, ChronoUnit.DAYS))));
+        tx.execute(s -> repository.save(task(ALICE, "middle", false, now.minus(1, ChronoUnit.DAYS))));
+        tx.execute(s -> repository.save(task(ALICE, "newest", false, now)));
+
+        Sort newestFirst = Sort.by(Sort.Direction.DESC, "createdAt");
+        Page<Task> firstPage = tx.execute(s -> repository.search(ALICE, null, null, PageRequest.of(0, 2, newestFirst)));
+        Page<Task> secondPage = tx.execute(s -> repository.search(ALICE, null, null, PageRequest.of(1, 2, newestFirst)));
+
+        assertEquals(List.of("newest", "middle"), titles(firstPage.getContent()));
+        assertEquals(3L, firstPage.getTotalElements());
+        assertEquals(2, firstPage.getTotalPages());
+
+        assertEquals(List.of("oldest"), titles(secondPage.getContent()));
+        assertEquals(3L, secondPage.getTotalElements());
     }
 
     // ---------- helpers ----------

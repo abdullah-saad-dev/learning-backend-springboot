@@ -176,9 +176,37 @@ class TaskApiTest {
 
         mvc.perform(get("/api/tasks").with(as(ALICE)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(3))
-                .andExpect(jsonPath("$[0].title").value("third"))
-                .andExpect(jsonPath("$[2].title").value("first"));
+                .andExpect(jsonPath("$.content.length()").value(3))
+                .andExpect(jsonPath("$.content[0].title").value("third"))
+                .andExpect(jsonPath("$.content[2].title").value("first"))
+                .andExpect(jsonPath("$.page.totalElements").value(3))
+                .andExpect(jsonPath("$.page.totalPages").value(1));
+    }
+
+    @Test
+    void listSupportsPaginationAndPageMetadata() throws Exception {
+        create(ALICE, "first", false);
+        create(ALICE, "second", false);
+        create(ALICE, "third", false);
+
+        mvc.perform(get("/api/tasks").with(as(ALICE)).param("page", "0").param("size", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.content[0].title").value("third"))
+                .andExpect(jsonPath("$.content[1].title").value("second"))
+                .andExpect(jsonPath("$.page.size").value(2))
+                .andExpect(jsonPath("$.page.number").value(0))
+                .andExpect(jsonPath("$.page.totalElements").value(3))
+                .andExpect(jsonPath("$.page.totalPages").value(2));
+
+        mvc.perform(get("/api/tasks").with(as(ALICE)).param("page", "1").param("size", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].title").value("first"))
+                .andExpect(jsonPath("$.page.size").value(2))
+                .andExpect(jsonPath("$.page.number").value(1))
+                .andExpect(jsonPath("$.page.totalElements").value(3))
+                .andExpect(jsonPath("$.page.totalPages").value(2));
     }
 
     // "done" is boxed so it has three states, not two: absent means no filter at all, which is
@@ -190,15 +218,15 @@ class TaskApiTest {
 
         mvc.perform(get("/api/tasks").with(as(ALICE)).param("done", "true"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].title").value("finished"));
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].title").value("finished"));
         mvc.perform(get("/api/tasks").with(as(ALICE)).param("done", "false"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].title").value("outstanding"));
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].title").value("outstanding"));
         mvc.perform(get("/api/tasks").with(as(ALICE)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2));
+                .andExpect(jsonPath("$.content.length()").value(2));
     }
 
     @Test
@@ -207,7 +235,7 @@ class TaskApiTest {
 
         mvc.perform(get("/api/tasks").with(as(ALICE)).param("title", "buy milk"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1));
+                .andExpect(jsonPath("$.content.length()").value(1));
     }
 
     @Test
@@ -218,10 +246,10 @@ class TaskApiTest {
 
         mvc.perform(get("/api/tasks").with(as(ALICE)).param("title", "buy milk").param("done", "true"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1));
+                .andExpect(jsonPath("$.content.length()").value(1));
         mvc.perform(get("/api/tasks").with(as(ALICE)).param("title", "buy milk").param("done", "false"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(0));
+                .andExpect(jsonPath("$.content.length()").value(0));
     }
 
     // A query parameter Spring cannot bind must reach its own 400, not fall through to the
@@ -256,8 +284,8 @@ class TaskApiTest {
 
         mvc.perform(get("/api/tasks").with(as(BOB)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].title").value("bob one"));
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].title").value("bob one"));
     }
 
     @Test
@@ -268,7 +296,7 @@ class TaskApiTest {
         // is not optional, so the filter cannot widen the result past his own rows.
         mvc.perform(get("/api/tasks").with(as(BOB)).param("title", "buy milk"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(0));
+                .andExpect(jsonPath("$.content.length()").value(0));
     }
 
     @Test

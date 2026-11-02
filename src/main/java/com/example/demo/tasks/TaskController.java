@@ -7,16 +7,16 @@ import com.example.demo.tasks.dtos.UpdateTaskRequest;
 import com.example.demo.tasks.entity.Task;
 import com.example.demo.tasks.service.TaskService;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -29,9 +29,11 @@ public class TaskController {
     }
 
     @GetMapping
-    public List<TaskResponse> findAll(@RequestParam(name = "title", required = false) String title,
-                                      @RequestParam(name = "done", required = false) Boolean done) {
-        return TaskResponse.of(service.search(title, done));
+    public Page<TaskResponse> findAll(
+            @RequestParam(name = "title", required = false) String title,
+            @RequestParam(name = "done", required = false) Boolean done,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return service.search(title, done, pageable).map(TaskResponse::of);
     }
     @GetMapping("/{id}")
     public TaskResponse findById(@PathVariable("id") UUID id) {
