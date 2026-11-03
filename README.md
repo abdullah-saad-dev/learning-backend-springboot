@@ -147,6 +147,7 @@ Every task belongs to a project (`projectId`) and has an optional `assigneeId` (
   - `V13`–`V14`: `email_verification_otps` (`5m` TTL OTP codes) and user profile fields (`avatar_url`, `bio`).
 - **Hardened password constraints.** `SignupRequest` enforces `8–128` characters with at least one number (`\d`) and one special character (`[^A-Za-z0-9\s]`), mirrored by a live requirement checklist in the signup UI.
 - **Paginated task queries.** `GET /api/tasks` uses Spring Data `Page<TaskResponse>` (`spring.data.web.pageable.serialization-mode=via-dto`, default size `20`, max `100`, ordered by `createdAt DESC`) with an explicit `countQuery`.
+- **Distributed advisory lock on scheduled token sweep.** [`SweepingService`](src/main/java/com/example/demo/auth/service/SweepingService.java) acquires `SELECT pg_try_advisory_xact_lock(424242)` inside its `@Transactional` nightly job so only one replica executes the expired-token purge when scaled horizontally.
 - **Sole-manager invariant.** A project must always have at least one `MANAGER`. Demoting or removing the last manager throws `ProjectConflictException` (`409 Conflict`).
 - **Filter-chain `401` and `403` errors are RFC 7807 `application/problem+json`.** [`SecurityConfig`](src/main/java/com/example/demo/auth/config/SecurityConfig.java) delegates `AuthenticationEntryPoint` and `AccessDeniedHandler` to `HandlerExceptionResolver` so security errors share the exact same RFC 7807 envelope as controller exceptions.
 - **Dev vs. Prod logging hygiene.** SQL parameter bind logging (`org.hibernate.orm.jdbc.bind=TRACE`) and `DEBUG` logging live exclusively in [`application-dev.properties`](src/main/resources/application-dev.properties) so sensitive parameters (such as token or password hashes) are never logged in production.
@@ -165,9 +166,3 @@ Every task belongs to a project (`projectId`) and has an optional `assigneeId` (
 | [`SelfInvocationTransactionDemoTest`](src/test/java/com/example/demo/auth/SelfInvocationTransactionDemoTest.java) | 1 | Proves `@Transactional(propagation = REQUIRES_NEW)` is bypassed on self-invocation |
 | [`Demo1ApplicationTests`](src/test/java/com/example/demo/Demo1ApplicationTests.java) | 1 | Context startup + Hibernate schema validation against all 14 Flyway migrations |
 
----
-
-## Future enhancements
-
-- **Distributed lock on token sweep:** `SweepingService` is idempotent, but adding ShedLock or `pg_try_advisory_lock` avoids redundant sweeps across multiple replicas.
-- **Keyset (cursor) pagination:** For very deep pages (`OFFSET` > 10,000), adding cursor pagination on `(created_at, id)` avoids scanning skipped rows.
