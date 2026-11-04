@@ -6,6 +6,7 @@ import AuthScreen from './components/auth/AuthScreen.jsx';
 import Rail from './components/shell/Rail.jsx';
 import TopBar from './components/shell/TopBar.jsx';
 import TaskList from './components/tasks/TaskList.jsx';
+import ProjectsView from './components/projects/ProjectsView.jsx';
 import Inspector from './components/tasks/Inspector.jsx';
 import Palette from './components/overlays/Palette.jsx';
 import ConfirmSheet from './components/overlays/ConfirmSheet.jsx';
@@ -48,6 +49,7 @@ export default function App() {
 
   const [view, setView] = useState({ type: 'mine' });
   const [filter, setFilter] = useState('open');
+  const [projectRoleFilter, setProjectRoleFilter] = useState('all');
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const [conflictOn, setConflictOn] = useState(null);
@@ -61,8 +63,10 @@ export default function App() {
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [newTaskProjectId, setNewTaskProjectId] = useState(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
+  const [membersProjectId, setMembersProjectId] = useState(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [confirmScope, setConfirmScope] = useState(null);
   const [toast, setToast] = useState(null);
@@ -360,12 +364,13 @@ export default function App() {
     setStickyTaskIds(new Set());
   }, []);
 
-  const handleOpenNewTask = useCallback(() => {
+  const handleOpenNewTask = useCallback((defaultProjId = null) => {
     if (projects.length === 0) {
       notify('Create a project first to add tasks to it.');
       setNewProjectOpen(true);
       return;
     }
+    setNewTaskProjectId(typeof defaultProjId === 'string' ? defaultProjId : null);
     setNewTaskOpen(true);
   }, [projects.length, notify]);
 
@@ -397,18 +402,22 @@ export default function App() {
     return <AuthScreen mode={mode} onMode={setMode} onDone={setMe} />;
   }
 
+  const isProjectsView = view.type === 'projects';
   const heading =
-    view.type === 'mine' ? 'My tasks'
-    : view.type === 'all' ? 'Everything'
+    view.type === 'mine' ? 'Assigned to me'
+    : view.type === 'all' ? 'All workspace tasks'
+    : view.type === 'projects' ? 'My Projects'
     : activeProject ? activeProject.name
     : 'Project';
+
+  const membersProject = (membersProjectId && projectsById[membersProjectId]) || activeProject;
 
   return (
     <div className="shell">
       <Rail
         me={me} projects={projects} tasks={tasks} view={view}
         onView={goTo}
-        onNewTask={handleOpenNewTask}
+        onNewTask={() => handleOpenNewTask(activeProject?.id)}
         onNewProject={() => setNewProjectOpen(true)}
         onOpenProfile={() => setProfileOpen(true)}
         onLogout={setConfirmScope}
@@ -416,25 +425,48 @@ export default function App() {
 
       <main className="main">
         <TopBar
-          heading={heading} project={activeProject}
+          heading={heading}
+          isProjectsView={isProjectsView}
+          project={activeProject}
           query={query} onQuery={setQuery}
           filter={filter} onFilter={handleFilterChange}
-          onNewTask={handleOpenNewTask}
+          projectRoleFilter={projectRoleFilter}
+          onProjectRoleFilter={setProjectRoleFilter}
+          onNewTask={() => handleOpenNewTask(activeProject?.id)}
           onNewProject={() => setNewProjectOpen(true)}
-          onOpenMembers={activeProject ? () => setMembersOpen(true) : null}
+          onOpenMembers={activeProject ? () => {
+            setMembersProjectId(activeProject.id);
+            setMembersOpen(true);
+          } : null}
         />
 
-        <div className={`board${selected ? ' with-panel' : ''}`}>
-          <TaskList
-            tasks={visible} projects={projects} selected={selected}
-            onSelect={(t) => { setSelectedId(t.id); setConflictOn(null); }}
-            onToggle={toggle}
-            onNewTask={handleOpenNewTask}
-            onNewProject={() => setNewProjectOpen(true)}
-            emptyFor={emptyCopyFor({ query, filter, view, hasProjects: projects.length > 0 })}
-          />
+        <div className={`board${!isProjectsView && selected ? ' with-panel' : ''}`}>
+          {isProjectsView ? (
+            <ProjectsView
+              projects={projects}
+              tasks={tasks}
+              query={query}
+              roleFilter={projectRoleFilter}
+              onOpenProject={(projId) => goTo({ type: 'project', id: projId })}
+              onOpenMembers={(proj) => {
+                setMembersProjectId(proj.id);
+                setMembersOpen(true);
+              }}
+              onNewProject={() => setNewProjectOpen(true)}
+              onNewTaskForProject={(projId) => handleOpenNewTask(projId)}
+            />
+          ) : (
+            <TaskList
+              tasks={visible} projects={projects} selected={selected}
+              onSelect={(t) => { setSelectedId(t.id); setConflictOn(null); }}
+              onToggle={toggle}
+              onNewTask={() => handleOpenNewTask(activeProject?.id)}
+              onNewProject={() => setNewProjectOpen(true)}
+              emptyFor={emptyCopyFor({ query, filter, view, hasProjects: projects.length > 0 })}
+            />
+          )}
 
-          {selected && (
+          {!isProjectsView && selected && (
             <Inspector
               task={selected}
               project={projectsById[selected.projectId]}
@@ -463,7 +495,7 @@ export default function App() {
           projects={projects}
           onClose={() => setPaletteOpen(false)}
           onView={goTo}
-          onNewTask={handleOpenNewTask}
+          onNewTask={() => handleOpenNewTask(activeProject?.id)}
           onNewProject={() => setNewProjectOpen(true)}
           onLogout={setConfirmScope}
         />
@@ -472,11 +504,12 @@ export default function App() {
       {newTaskOpen && (
         <NewTaskSheet
           projects={projects}
-          defaultProjectId={activeProject?.id}
-          onClose={() => setNewTaskOpen(false)}
+          defaultProjectId={newTaskProjectId || activeProject?.id}
+          onClose={() => { setNewTaskOpen(false); setNewTaskProjectId(null); }}
           onCreated={(created) => {
             setTasks((all) => [created, ...all]);
             setNewTaskOpen(false);
+            setNewTaskProjectId(null);
             setSelectedId(created.id);
             notify('Task created.');
           }}
@@ -497,11 +530,11 @@ export default function App() {
         />
       )}
 
-      {membersOpen && activeProject && (
+      {membersOpen && membersProject && (
         <MembersSheet
-          project={activeProject}
+          project={membersProject}
           me={me}
-          onClose={() => setMembersOpen(false)}
+          onClose={() => { setMembersOpen(false); setMembersProjectId(null); }}
           onChanged={() => { reloadData(); }}
           onDeleted={scheduleDeleteProject}
         />

@@ -94,7 +94,24 @@
   background: var(--void);
 }
 .rail-scroll { flex: 1; overflow-y: auto; padding-bottom: 12px; }
-.rail-spine { left: 16px; top: 98px; bottom: 62px; }
+.rail-spine { left: 16px; top: 56px; bottom: 62px; }
+
+.rail-section {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  border-top: 1px solid var(--line);
+}
+.rail-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 16px 8px;
+}
+.rail-section-head .mono {
+  color: var(--txt);
+  font-weight: 600;
+  letter-spacing: .08em;
+}
 
 .nav-item {
   width: 100%;
@@ -116,14 +133,14 @@
   color: var(--txt-mute);
 }
 
-.group { margin-top: 22px; }
+.group { margin-top: 14px; }
 .group-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px 9px;
+  padding: 0 16px 7px;
 }
-.group-head .mono { color: var(--txt-mute); }
+.group-head .mono { color: var(--txt-mute); font-size: 10px; }
 
 .plist { position: relative; }
 
@@ -533,3 +550,113 @@
 .conflict p { margin: 0 0 10px; font-size: 12px; color: var(--txt-dim); line-height: 1.55; }
 .conflict .row { display: flex; gap: 8px; }
 .conflict .btn { padding: 6px 11px; font-size: 12.5px; }
+
+/* ── My Projects View ── */
+.projects-board {
+  padding: 20px 24px 60px;
+}
+.psection {
+  margin-bottom: 28px;
+}
+.psection-head {
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.psection-head .mono {
+  color: var(--txt-mute);
+  letter-spacing: .07em;
+}
+.pgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 14px;
+}
+.pcard {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-hi);
+  border-radius: var(--r-md);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  transition: border-color .15s var(--ease), background .15s var(--ease);
+}
+.pcard.lead { border-left-color: var(--gold); }
+.pcard.member { border-left-color: var(--blue); }
+.pcard:hover { background: var(--raised); }
+
+.pcard-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.pcard-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pcard-title {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--txt);
+  letter-spacing: -.01em;
+  text-align: left;
+}
+.pcard-title:hover { color: var(--gold); }
+.pcard-desc {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: var(--txt-mute);
+  line-height: 1.5;
+}
+.pcard-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.pcard-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(30, 34, 37, .65);
+  flex-wrap: wrap;
+}
+.pcard-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--txt-mute);
+  font-size: 11px;
+}
+.pcard-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--txt-mute);
+}
+.pcard-bar {
+  width: 68px;
+  height: 5px;
+  border-radius: 99px;
+  background: var(--void);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.pcard-bar span {
+  display: block;
+  height: 100%;
+  background: var(--ok);
+  border-radius: 99px;
+  transition: width .2s var(--ease);
+}

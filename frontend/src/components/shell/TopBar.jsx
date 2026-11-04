@@ -1,18 +1,27 @@
 import { roleClass, roleLabel, isSolo } from '../../lib/roles.js';
 
-const FILTERS = [
+const TASK_FILTERS = [
   ['open', 'Open'],
   ['done', 'Done'],
   ['all', 'All']
 ];
 
+const PROJECT_FILTERS = [
+  ['all', 'All'],
+  ['lead', 'Leading'],
+  ['member', 'Member']
+];
+
 export default function TopBar({
   heading,
+  isProjectsView,
   project,
   query,
   onQuery,
   filter,
   onFilter,
+  projectRoleFilter,
+  onProjectRoleFilter,
   onNewTask,
   onNewProject,
   onOpenMembers
@@ -49,39 +58,63 @@ export default function TopBar({
         )}
       </h1>
 
-      <input className="search" value={query} placeholder="Search titles…"
-             onChange={(e) => onQuery(e.target.value)} aria-label="Search tasks" />
+      <input
+        className="search"
+        value={query}
+        placeholder={isProjectsView ? 'Search projects…' : 'Search tasks…'}
+        onChange={(e) => onQuery(e.target.value)}
+        aria-label={isProjectsView ? 'Search projects' : 'Search tasks'}
+      />
 
-      <div className="segmented" role="group" aria-label="Filter">
-        {FILTERS.map(([key, label]) => (
-          <button key={key} aria-pressed={filter === key ? 'true' : 'false'}
-                  onClick={() => onFilter(key)}>
-            {label}
-          </button>
-        ))}
-      </div>
+      {isProjectsView ? (
+        <div className="segmented" role="group" aria-label="Filter projects by role">
+          {PROJECT_FILTERS.map(([key, label]) => (
+            <button
+              key={key}
+              aria-pressed={projectRoleFilter === key ? 'true' : 'false'}
+              onClick={() => onProjectRoleFilter(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="segmented" role="group" aria-label="Filter tasks">
+          {TASK_FILTERS.map(([key, label]) => (
+            <button
+              key={key}
+              aria-pressed={filter === key ? 'true' : 'false'}
+              onClick={() => onFilter(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 'none' }}>
-        {onNewProject && (
-          <button
-            type="button"
-            className="btn btn-cta-outline"
-            style={{ padding: '7px 12px', fontSize: '12.5px' }}
-            onClick={onNewProject}
-          >
-            + New project
-          </button>
-        )}
-
-        {onNewTask && (
-          <button
-            type="button"
-            className="btn btn-cta"
-            style={{ padding: '7px 13px', fontSize: '12.5px' }}
-            onClick={onNewTask}
-          >
-            + New task
-          </button>
+        {isProjectsView ? (
+          onNewProject && (
+            <button
+              type="button"
+              className="btn btn-cta"
+              style={{ padding: '7px 13px', fontSize: '12.5px' }}
+              onClick={onNewProject}
+            >
+              + New project
+            </button>
+          )
+        ) : (
+          onNewTask && (
+            <button
+              type="button"
+              className="btn btn-cta"
+              style={{ padding: '7px 13px', fontSize: '12.5px' }}
+              onClick={onNewTask}
+            >
+              + New task
+            </button>
+          )
         )}
       </div>
     </header>

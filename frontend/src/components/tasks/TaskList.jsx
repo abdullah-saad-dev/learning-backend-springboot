@@ -10,19 +10,18 @@ function EmptyState({ title, body, hasProjects, onNewTask, onNewProject }) {
       <h3>{title}</h3>
       <p>{body}</p>
       <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' }}>
-        {hasProjects && onNewTask && (
-          <button type="button" className="btn btn-cta" onClick={onNewTask}>
-            + Add a task
-          </button>
-        )}
-        {onNewProject && (
-          <button
-            type="button"
-            className={hasProjects ? 'btn btn-cta-outline' : 'btn btn-cta'}
-            onClick={onNewProject}
-          >
-            + Create a project
-          </button>
+        {hasProjects ? (
+          onNewTask && (
+            <button type="button" className="btn btn-cta" onClick={onNewTask}>
+              + Add a task
+            </button>
+          )
+        ) : (
+          onNewProject && (
+            <button type="button" className="btn btn-cta" onClick={onNewProject}>
+              + Create your first project
+            </button>
+          )
         )}
       </div>
     </div>
