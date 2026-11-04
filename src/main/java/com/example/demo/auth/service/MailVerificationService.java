@@ -21,6 +21,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
 
+/**
+ * Manages 6-digit email verification One-Time Passwords (OTPs) for user registration.
+ * <p>
+ * Raw OTP values are never persisted in plaintext; only their SHA-256 hex digests are stored
+ * in {@code email_verification_otps}, and verification compares digests in constant time via
+ * {@link MessageDigest#isEqual(byte[], byte[])}.
+ */
 @Slf4j
 @Service
 public class MailVerificationService {
@@ -80,7 +87,10 @@ public class MailVerificationService {
         return otp;
     }
 
-    public void deliverOtpEmail(String email, String otp, Instant expiresAt) {
+    /**
+     * Composes and sends the verification email containing the 6-digit OTP and its TTL.
+     */
+    private void deliverOtpEmail(String email, String otp, Instant expiresAt) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(mailFrom);
         message.setTo(email);
@@ -100,6 +110,10 @@ public class MailVerificationService {
                 .log();
     }
 
+    /**
+     * Validates a candidate 6-digit OTP against the stored hash and expiration timestamp,
+     * marking the record as verified when it matches.
+     */
     @Transactional
     public void verifyOtp(String email, String otp) {
         Instant now = clock.instant();
@@ -134,14 +148,14 @@ public class MailVerificationService {
      */
     @Transactional
     public void verifyAndConsumeOnSignup(String email, String otp) {
-        var existingOpt = otpRepository.findByEmail(email);
+        var existingOtp = otpRepository.findByEmail(email);
         if (otp != null && !otp.isBlank()) {
             verifyOtp(email, otp);
             otpRepository.deleteByEmail(email);
             return;
         }
-        if (existingOpt.isPresent()) {
-            EmailVerificationOtp entity = existingOpt.get();
+        if (existingOtp.isPresent()) {
+            EmailVerificationOtp entity = existingOtp.get();
             if (!Boolean.TRUE.equals(entity.getVerified()) || !entity.getExpiresAt().isAfter(clock.instant())) {
                 throw new InvalidOtpException("Please verify the 6-digit code sent to your email before completing signup.");
             }
@@ -149,7 +163,10 @@ public class MailVerificationService {
         }
     }
 
-    public static String hashOtp(String rawOtp) {
+    /**
+     * Computes the lowercase hex-encoded SHA-256 digest of a raw OTP string.
+     */
+    private static String hashOtp(String rawOtp) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(rawOtp.getBytes(StandardCharsets.UTF_8));

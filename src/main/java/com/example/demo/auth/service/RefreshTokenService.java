@@ -49,12 +49,18 @@ public class RefreshTokenService {
     }
 
 
+    /**
+     * Generates a cryptographically random 256-bit URL-safe Base64 token string.
+     */
     private String generateToken() {
         byte[] bytes = new byte[32];
         secureRandom.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
+    /**
+     * Computes the SHA-256 hex digest of a raw refresh token so plaintext tokens are never stored.
+     */
     private String hashToken(String rawToken) {
 
         try {
@@ -66,6 +72,10 @@ public class RefreshTokenService {
         }
     }
 
+    /**
+     * Atomically rotates an active refresh token, diagnosing reuse or expiration if the atomic update
+     * affects zero rows, and returns the replacement token in the same token family.
+     */
     @Transactional
     public RotationResult refresh(String rawToken) {
         Instant now = clock.instant();
@@ -84,6 +94,9 @@ public class RefreshTokenService {
         return new RotationResult(newToken.getTokenString(), newToken.getUserId());
     }
 
+    /**
+     * Mints and persists a brand-new refresh token starting a new token family upon login.
+     */
     @Transactional
     public String mintToken(User user) {
         String token = generateToken();
@@ -136,6 +149,10 @@ public class RefreshTokenService {
                 .log();
     }
 
+    /**
+     * Constructs the next active {@link RefreshToken} in the same family, inheriting the family's
+     * absolute expiration ceiling.
+     */
     private RefreshToken generateNewToken(RefreshToken oldToken, Instant now) {
         String newTokenString = generateToken();
         String newTokenHash = hashToken(newTokenString);
@@ -151,6 +168,11 @@ public class RefreshTokenService {
                 .build();
     }
 
+    /**
+     * Inspects why a refresh token could not be rotated: distinguishes between normal expiry,
+     * a benign two-tab race within the grace window, and credential theft (which revokes the
+     * entire token family in an independent transaction).
+     */
     private void diagnoseToken(RefreshToken token, Instant now) {
         Instant graceBoundary = now.minusSeconds(refreshTokenRotationGraceSeconds);
         if (!token.getExpiresAt().isAfter(now)

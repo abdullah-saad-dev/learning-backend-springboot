@@ -48,10 +48,17 @@ public class ProjectService {
         this.eventPublisher = eventPublisher;
     }
 
+    /**
+     * Loads a project visible to the currently authenticated user, or throws {@link ProjectNotFoundException}.
+     */
+    @Transactional(readOnly = true)
     public Project findById(UUID id) {
         return read(id);
     }
 
+    /**
+     * Searches projects the current user belongs to, optionally filtered by name, status, and priority.
+     */
     @Transactional(readOnly = true)
     public List<Project> search(String name, ProjectStatus status, ProjectPriority priority) {
         UUID userId = securityContext.getCurrentUserId();
@@ -63,8 +70,11 @@ public class ProjectService {
         return readProjects;
     }
 
-    @Transactional(readOnly = true)
-    public Project read(UUID id) {
+    /**
+     * Internal helper that fetches a project scoped to the current user's membership,
+     * throwing {@link ProjectNotFoundException} (404) if missing or inaccessible.
+     */
+    private Project read(UUID id) {
         UUID userId = securityContext.getCurrentUserId();
         Project readProject = projectRepository.findByIdAndUserId(id, userId).orElseThrow(
                 () -> {
@@ -82,6 +92,10 @@ public class ProjectService {
         return readProject;
     }
 
+    /**
+     * Creates a new project with the current user as {@code MANAGER}, validates start/due dates,
+     * and publishes a {@code PROJECT_CREATED} event.
+     */
     @Transactional
     public Project create(CreateProjectRequest r) {
         User current = userRepository.getReferenceById(securityContext.getCurrentUserId());
@@ -122,6 +136,9 @@ public class ProjectService {
         return savedProject;
     }
 
+    /**
+     * Deletes a project at the expected optimistic-lock version and publishes a {@code PROJECT_DELETED} event.
+     */
     @Transactional
     @PreAuthorize("hasRole('ADMIN') or @projectSecurity.isManager(#id)")
     public void delete(UUID id, long expectedVersion) {
@@ -139,6 +156,9 @@ public class ProjectService {
                 .log();
     }
 
+    /**
+     * Updates a project's attributes after verifying its optimistic-lock version and date ordering.
+     */
     @Transactional
     @PreAuthorize("hasRole('ADMIN') or @projectSecurity.isManager(#r.id())")
     public Project update(UpdateProjectRequest r) {
@@ -169,6 +189,9 @@ public class ProjectService {
         return saved;
     }
 
+    /**
+     * Lists all members and their assigned roles for a project visible to the current user.
+     */
     @Transactional(readOnly = true)
     public List<ProjectMemberResponse> getMembers(UUID projectId) {
         Project project = read(projectId);
@@ -182,12 +205,19 @@ public class ProjectService {
                 .toList();
     }
 
+    /**
+     * Adds a user to a project by user ID and role, requiring {@code MANAGER} authority.
+     */
     @Transactional
     @PreAuthorize("hasRole('ADMIN') or @projectSecurity.isManager(#projectId)")
     public ProjectMemberResponse addMember(UUID projectId, UUID userId, ProjectRole role) {
         return addMember(projectId, userId, null, role);
     }
 
+    /**
+     * Adds a user to a project by either user ID or email address with the specified role,
+     * and publishes a {@code MEMBER_ADDED} event.
+     */
     @Transactional
     @PreAuthorize("hasRole('ADMIN') or @projectSecurity.isManager(#projectId)")
     public ProjectMemberResponse addMember(UUID projectId, UUID userId, String email, ProjectRole role) {
@@ -211,6 +241,10 @@ public class ProjectService {
         return new ProjectMemberResponse(user.getId(), user.getUsername(), user.getEmail(), finalRole);
     }
 
+    /**
+     * Removes a member from a project and unassigns their tasks in that project, enforcing
+     * the sole-manager invariant so a project never loses its last {@code MANAGER}.
+     */
     @Transactional
     @PreAuthorize("hasRole('ADMIN') or @projectSecurity.isManager(#projectId)")
     public void removeMember(UUID projectId, UUID userId) {
@@ -231,6 +265,10 @@ public class ProjectService {
                 Map.of("memberId", userId.toString())));
     }
 
+    /**
+     * Updates a project member's role while enforcing the sole-manager invariant,
+     * and publishes a {@code MEMBER_ROLE_CHANGED} event.
+     */
     @Transactional
     @PreAuthorize("hasRole('ADMIN') or @projectSecurity.isManager(#projectId)")
     public ProjectMemberResponse updateMemberRole(UUID projectId, UUID userId, ProjectRole role) {
@@ -247,14 +285,23 @@ public class ProjectService {
                 throw new ProjectConflictException("Cannot demote the only manager of a project");
             }
         }
+        ProjectRole previousRole = project.getMembersWithRole().get(user);
         project.addMember(user, role);
         projectRepository.save(project);
         eventPublisher.publishEvent(new AuditEvent(
                 "MEMBER_ROLE_CHANGED", "PROJECT", projectId, securityContext.getCurrentUserId(),
-                Map.of("memberId", userId.toString(), "username", user.getUsername(), "role", role.name())));
+                Map.of(
+                        "memberId", userId.toString(),
+                        "username", user.getUsername(),
+                        "role", role.name(),
+                        "previousRole", previousRole != null ? previousRole.name() : ""
+                )));
         return new ProjectMemberResponse(user.getId(), user.getUsername(), user.getEmail(), role);
     }
 
+    /**
+     * Builds a snapshot map of a project's key properties and manager IDs for audit and notification events.
+     */
     private Map<String, Object> projectChanges(Project project) {
         Map<String, Object> changes = new LinkedHashMap<>();
         changes.put("name", project.getName());
@@ -263,6 +310,13 @@ public class ProjectService {
         }
         if (project.getPriority() != null) {
             changes.put("priority", project.getPriority().name());
+        }
+        if (project.getMembersWithRole() != null) {
+            List<String> managerIds = project.getMembersWithRole().entrySet().stream()
+                    .filter(e -> e.getValue() == ProjectRole.MANAGER && e.getKey() != null && e.getKey().getId() != null)
+                    .map(e -> e.getKey().getId().toString())
+                    .toList();
+            changes.put("managerIds", managerIds);
         }
         return changes;
     }

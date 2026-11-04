@@ -52,6 +52,9 @@ public class AuthService {
         this.mailVerificationService = mailVerificationService;
     }
 
+    /**
+     * Authenticates a user's email and password and issues both an access JWT and a refresh token.
+     */
     public Tokens login(String email, String password) {
         UsernamePasswordAuthenticationToken authenticationToken =
                 new UsernamePasswordAuthenticationToken(email, password);
@@ -67,6 +70,9 @@ public class AuthService {
         return new Tokens(jwtService.getJwtDetails(accessToken), refreshToken);
     }
 
+    /**
+     * Rotates a presented refresh token and mints a fresh access JWT for the token's owner.
+     */
     public Tokens refresh(String rawToken) {
         RotationResult rotationResult = refreshTokenService.refresh(rawToken);
         String refreshToken = rotationResult.rawRefreshToken();
@@ -86,21 +92,33 @@ public class AuthService {
         return new Tokens(jwtService.getJwtDetails(accessToken), refreshToken);
     }
 
+    /**
+     * Generates and dispatches a 6-digit signup verification OTP to the given email address.
+     */
     @Transactional
     public String sendSignupOtp(String email) {
         return mailVerificationService.sendOtp(email);
     }
 
+    /**
+     * Verifies a 6-digit signup OTP for the given email address.
+     */
     @Transactional
     public void verifySignupOtp(String email, String otp) {
         mailVerificationService.verifyOtp(email, otp);
     }
 
+    /**
+     * Registers a new user account without an explicit OTP parameter when none is pending.
+     */
     @Transactional
     public void signup(String email, String password, String username) {
         signup(email, password, username, null);
     }
 
+    /**
+     * Verifies and consumes any pending signup OTP, hashes the user's password, and persists the new account.
+     */
     @Transactional
     public void signup(String email, String password, String username, String otp) {
         mailVerificationService.verifyAndConsumeOnSignup(email, otp);
@@ -124,6 +142,9 @@ public class AuthService {
         }
     }
 
+    /**
+     * Loads the profile of the currently authenticated user.
+     */
     @Transactional(readOnly = true)
     public UserProfileResponse getMe() {
         UUID userId = securityContext.getCurrentUserId();
@@ -134,6 +155,9 @@ public class AuthService {
         return UserProfileResponse.of(user);
     }
 
+    /**
+     * Updates the authenticated user's display name, bio, and avatar URL.
+     */
     @Transactional
     public UserProfileResponse updateMe(UpdateProfileRequest request) {
         UUID userId = securityContext.getCurrentUserId();
@@ -150,10 +174,16 @@ public class AuthService {
         return UserProfileResponse.of(saved);
     }
 
+    /**
+     * Revokes the refresh-token family associated with the current device's cookie.
+     */
     public void logout(String rawRefreshToken) {
         refreshTokenService.logout(rawRefreshToken);
     }
 
+    /**
+     * Revokes all active refresh-token families across every device for the current user.
+     */
     public void logoutAll() {
         refreshTokenService.logoutAll(securityContext.getCurrentUserId());
     }

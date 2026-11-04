@@ -39,41 +39,63 @@ public class AuthController {
         this.authService = authService;
     }
 
+    /**
+     * Authenticates a user by email and password, returning a short-lived access JWT in the body
+     * and setting the rotating refresh token in an {@code HttpOnly} cookie.
+     */
     @PostMapping("/login")
     public ResponseEntity<JwtDetails> login(@Valid @RequestBody LoginRequest request) {
         Tokens tokens = authService.login(request.email(), request.password());
         return setCookieAndGetResponse(tokens);
     }
 
+    /**
+     * Rotates the refresh token from the {@code HttpOnly} cookie and issues a fresh access JWT.
+     */
     @PostMapping("/refresh")
     public ResponseEntity<JwtDetails> refresh(@CookieValue(REFRESH_COOKIE) String refreshToken) {
         Tokens tokens = authService.refresh(refreshToken);
         return setCookieAndGetResponse(tokens);
     }
 
+    /**
+     * Generates and sends a 6-digit verification OTP to a prospective signup email address.
+     */
     @PostMapping("/otp/send")
     public ResponseEntity<Void> sendOtp(@RequestBody @Valid SendOtpRequest request) {
         authService.sendSignupOtp(request.email());
         return ResponseEntity.ok().build();
     }
 
+    /**
+     * Verifies a 6-digit OTP sent to the user's email address prior to completing registration.
+     */
     @PostMapping("/otp/verify")
     public ResponseEntity<Void> verifyOtp(@RequestBody @Valid VerifyOtpRequest request) {
         authService.verifySignupOtp(request.email(), request.otp());
         return ResponseEntity.ok().build();
     }
 
+    /**
+     * Registers a new user account after validating password rules and consuming any pending OTP.
+     */
     @PostMapping("/signup")
-    public ResponseEntity<Void> Signup(@RequestBody @Valid SignupRequest request) {
+    public ResponseEntity<Void> signup(@RequestBody @Valid SignupRequest request) {
         authService.signup(request.email(), request.password(), request.username(), request.otp());
         return ResponseEntity.ok().build();
     }
 
+    /**
+     * Returns the profile details of the currently authenticated user.
+     */
     @GetMapping("/me")
     public UserProfileResponse me() {
         return authService.getMe();
     }
 
+    /**
+     * Updates the display name, bio, and profile photo of the currently authenticated user.
+     */
     @PutMapping("/me")
     public UserProfileResponse updateMe(@RequestBody @Valid UpdateProfileRequest request) {
         return authService.updateMe(request);

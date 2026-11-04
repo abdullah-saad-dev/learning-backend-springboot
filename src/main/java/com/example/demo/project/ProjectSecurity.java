@@ -16,6 +16,11 @@ public class ProjectSecurity {
         this.securityContext = securityContext;
     }
 
+    /**
+     * Checks whether the current user is a {@code MANAGER} of the specified project.
+     * Throws {@link ProjectNotFoundException} (404) if the user is not a member of the project at all,
+     * preventing cross-tenant project existence enumeration.
+     */
     public boolean isManager(UUID projectId) {
         if (projectId == null) {
             throw new ProjectNotFoundException("no project with id null");
@@ -27,6 +32,9 @@ public class ProjectSecurity {
         return projectRepository.isManager(projectId, currentUserId);
     }
 
+    /**
+     * Checks whether the current user belongs to the specified project in any role.
+     */
     public boolean isMember(UUID projectId) {
         if (projectId == null) {
             return false;

@@ -33,6 +33,10 @@ public class AuditLogService {
         this.clock = clock;
     }
 
+    /**
+     * Synchronous event listener that records a persistent {@link AuditLog} entry inside
+     * the caller's database transaction whenever an {@link AuditEvent} is published.
+     */
     @EventListener
     @Transactional
     public void onAuditEvent(AuditEvent event) {
@@ -57,6 +61,10 @@ public class AuditLogService {
                 .log();
     }
 
+    /**
+     * Returns the 50 most recent audit log entries for a project, verifying that the caller
+     * is a member of the project first.
+     */
     public List<AuditLogResponse> getProjectActivity(UUID projectId) {
         UUID userId = securityContext.getCurrentUserId();
         if (!projectRepository.isMember(projectId, userId)) {

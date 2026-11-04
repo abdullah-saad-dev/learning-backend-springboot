@@ -49,10 +49,17 @@ public class TaskService {
         this.eventPublisher = eventPublisher;
     }
 
+    /**
+     * Loads a single task visible to the current user, or throws {@link TaskNotFoundException}.
+     */
     public Task findById(UUID id) {
         return read(id);
     }
 
+    /**
+     * Creates a new task inside a project the current user belongs to, verifies that any assignee
+     * is also a member of that project, and publishes a {@code TASK_CREATED} event.
+     */
     @Transactional
     public Task create(UUID projectId, String title, String details, boolean done,
                        LocalDate dueDate, UUID assigneeId) {
@@ -74,6 +81,10 @@ public class TaskService {
         return saved;
     }
 
+    /**
+     * Replaces a task's mutable fields after checking its optimistic-lock version and publishes
+     * a {@code TASK_UPDATED} event (including {@code previousAssigneeId} for assignment notifications).
+     */
     @Transactional
     @PreAuthorize("hasRole('ADMIN') or @taskSecurity.canModify(#id)")
     public Task update(UUID id, UpdateTaskRequest r) {
@@ -81,14 +92,19 @@ public class TaskService {
         if (r.version() == null || !Objects.equals(task.getVersion(), r.version())) {
             throw new TaskConflictException(id, r.version(), task.getVersion());
         }
+        UUID previousAssigneeId = task.getAssignee() != null ? task.getAssignee().getId() : null;
         task.setTitle(r.title());
         task.setDetails(r.details());
         task.setDone(r.done());
         task.setDueDate(r.dueDate());
         task.setAssignee(resolveAssignee(task.getProject().getId(), r.assigneeId()));
         Task saved = taskRepository.saveAndFlush(task);
+        Map<String, Object> changes = taskChanges(saved);
+        if (previousAssigneeId != null) {
+            changes.put("previousAssigneeId", previousAssigneeId.toString());
+        }
         eventPublisher.publishEvent(new AuditEvent(
-                "TASK_UPDATED", "TASK", saved.getId(), securityContext.getCurrentUserId(), taskChanges(saved)));
+                "TASK_UPDATED", "TASK", saved.getId(), securityContext.getCurrentUserId(), changes));
         return saved;
     }
 
@@ -107,6 +123,10 @@ public class TaskService {
         return userRepository.getReferenceById(assigneeId);
     }
 
+    /**
+     * Toggles a task's completion status at the expected optimistic-lock version and publishes
+     * a {@code TASK_STATUS_CHANGED} event.
+     */
     @Transactional
     @PreAuthorize("hasRole('ADMIN') or @taskSecurity.canModify(#id)")
     public Task setDone(UUID id, boolean done, long expectedVersion) {
@@ -127,6 +147,9 @@ public class TaskService {
         return setDone(id, done, expectedVersion);
     }
 
+    /**
+     * Deletes a task at the expected optimistic-lock version and publishes a {@code TASK_DELETED} event.
+     */
     @Transactional
     @PreAuthorize("hasRole('ADMIN') or @taskSecurity.isProjectManager(#id)")
     public void delete(UUID id, long version) {
@@ -140,6 +163,9 @@ public class TaskService {
                 "TASK_DELETED", "TASK", id, securityContext.getCurrentUserId(), changes));
     }
 
+    /**
+     * Builds a snapshot map of a task's key properties for audit logging and event listeners.
+     */
     private Map<String, Object> taskChanges(Task task) {
         Map<String, Object> changes = new LinkedHashMap<>();
         if (task.getProject() != null && task.getProject().getId() != null) {
@@ -156,16 +182,26 @@ public class TaskService {
         return changes;
     }
 
+    /**
+     * Internal helper that fetches a task scoped to projects the current user belongs to,
+     * throwing {@link TaskNotFoundException} (404) if missing or inaccessible.
+     */
     private Task read(UUID id) {
         UUID userId = securityContext.getCurrentUserId();
         return taskRepository.findByIdAndUserId(id, userId).orElseThrow(() -> new TaskNotFoundException(id));
     }
 
+    /**
+     * Searches all tasks visible to the current user matching optional title and completion filters.
+     */
     public List<Task> search(String title, Boolean done) {
         UUID userId = securityContext.getCurrentUserId();
         return taskRepository.search(userId, title, done);
     }
 
+    /**
+     * Searches a single page of tasks visible to the current user matching optional title and completion filters.
+     */
     @Transactional(readOnly = true)
     public Page<Task> search(String title, Boolean done, Pageable pageable) {
         UUID userId = securityContext.getCurrentUserId();

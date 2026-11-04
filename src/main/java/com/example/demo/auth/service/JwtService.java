@@ -30,6 +30,9 @@ public class JwtService {
         this.clock = clock;
     }
 
+    /**
+     * Generates a signed HS256 access JWT encoding the user's UUID as {@code sub} and their system {@code role}.
+     */
     public String generateToken(User user) {
         Instant now = clock.instant();
 
@@ -44,22 +47,32 @@ public class JwtService {
         return this.jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
     }
 
+    /**
+     * Computes the expiration timestamp for a newly minted access token based on the configured TTL.
+     */
     private Instant getExpirationTime() {
         return clock.instant().plus(ttlMinutes, ChronoUnit.MINUTES);
     }
 
+    /**
+     * Extracts the expiration timestamp from an encoded JWT string.
+     */
     private Instant getExpirationTime(String token) {
         return jwtDecoder.decode(token).getExpiresAt();
     }
 
-    public Instant getIssuedAt(String token) {
+    /**
+     * Extracts the issued-at timestamp from an encoded JWT string.
+     */
+    private Instant getIssuedAt(String token) {
         return jwtDecoder.decode(token).getIssuedAt();
     }
 
+    /**
+     * Builds the {@link JwtDetails} response payload containing the raw token and its timestamps.
+     */
     public JwtDetails getJwtDetails(String token) {
         return new JwtDetails(token,
                 getIssuedAt(token), getExpirationTime(token));
     }
-
-
 }

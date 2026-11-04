@@ -17,16 +17,26 @@ public class TaskSecurity {
         this.securityContext = securityContext;
     }
 
+    /**
+     * Verifies that the task is visible to the caller and returns {@code true} if the caller is its assignee.
+     */
     public boolean isAssignee(UUID taskId) {
         UUID currentUserId = requireVisibleTask(taskId);
         return taskRepository.isUserAssignedToTask(taskId, currentUserId);
     }
 
+    /**
+     * Verifies that the task is visible to the caller and returns {@code true} if the caller manages its project.
+     */
     public boolean isProjectManager(UUID taskId) {
         UUID currentUserId = requireVisibleTask(taskId);
         return taskRepository.isProjectManagerForTask(taskId, currentUserId);
     }
 
+    /**
+     * Verifies that the task is visible to the caller and returns {@code true} if the caller is either
+     * the task's assignee or a manager of its project.
+     */
     public boolean canModify(UUID taskId) {
         UUID currentUserId = requireVisibleTask(taskId);
         return taskRepository.isUserAssignedToTask(taskId, currentUserId)

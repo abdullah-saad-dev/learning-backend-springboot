@@ -72,8 +72,8 @@ public class TaskController {
     @PutMapping({"/{id}"})
     public ResponseEntity<TaskResponse> updateTask(@PathVariable("id") UUID id,
                                                    @Valid @RequestBody UpdateTaskRequest r) {
-        Task updatedRequest = service.update(id, r);
-        TaskResponse taskResponse = TaskResponse.of(updatedRequest);
+        Task updatedTask = service.update(id, r);
+        TaskResponse taskResponse = TaskResponse.of(updatedTask);
         return ResponseEntity.ok(taskResponse);
     }
 }
