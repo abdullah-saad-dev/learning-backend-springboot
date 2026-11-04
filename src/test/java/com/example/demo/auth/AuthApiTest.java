@@ -4,8 +4,10 @@ import com.example.demo.MockMvcSecurity;
 import com.example.demo.PostgresTestContainer;
 import com.example.demo.auth.entity.User;
 import com.example.demo.auth.enums.Role;
+import com.example.demo.auth.repository.EmailVerificationOtpRepository;
 import com.example.demo.auth.repository.UserRepository;
 import com.example.demo.auth.service.MailVerificationService;
+import com.example.demo.auth.service.SweepingService;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -51,7 +53,11 @@ class AuthApiTest {
     @Autowired
     private UserRepository users;
     @Autowired
+    private EmailVerificationOtpRepository otpRepository;
+    @Autowired
     private MailVerificationService mailVerificationService;
+    @Autowired
+    private SweepingService sweepingService;
     @Autowired
     private PasswordEncoder passwordEncoder;
     @Autowired
@@ -179,7 +185,7 @@ class AuthApiTest {
         };
 
         MailVerificationService smtpService = new MailVerificationService(
-                null,
+                otpRepository,
                 users,
                 fakeSender,
                 java.time.Clock.systemUTC(),
@@ -187,13 +193,37 @@ class AuthApiTest {
                 "no-reply@managable.app"
         );
 
-        smtpService.deliverOtpEmail("recipient@example.com", "654321", java.time.Instant.now().plusSeconds(300));
+        String generatedOtp = smtpService.sendOtp("recipient@example.com");
 
         assertThat(captured.get()).isNotNull();
         assertThat(captured.get().getFrom()).isEqualTo("no-reply@managable.app");
         assertThat(captured.get().getTo()).containsExactly("recipient@example.com");
         assertThat(captured.get().getSubject()).isEqualTo("Your Managable verification code");
-        assertThat(captured.get().getText()).contains("654321");
+        assertThat(captured.get().getText()).contains(generatedOtp);
+    }
+
+    @Test
+    void sweepingJobPurgesExpiredUnconsumedOtps() {
+        var now = java.time.Instant.now();
+        otpRepository.saveAndFlush(com.example.demo.auth.entity.EmailVerificationOtp.builder()
+                .email("stale@example.com")
+                .otpHash("0".repeat(64))
+                .expiresAt(now.minusSeconds(60))
+                .verified(false)
+                .createdAt(now.minusSeconds(360))
+                .build());
+        otpRepository.saveAndFlush(com.example.demo.auth.entity.EmailVerificationOtp.builder()
+                .email("fresh@example.com")
+                .otpHash("1".repeat(64))
+                .expiresAt(now.plusSeconds(300))
+                .verified(false)
+                .createdAt(now)
+                .build());
+
+        sweepingService.sweep();
+
+        assertThat(otpRepository.findByEmail("stale@example.com")).isEmpty();
+        assertThat(otpRepository.findByEmail("fresh@example.com")).isPresent();
     }
 
     @Test
