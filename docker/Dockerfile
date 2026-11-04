@@ -9,14 +9,19 @@ WORKDIR /workspace
 
 # Copy the wrapper and POM first so dependency resolution is cached in its own
 # layer and only re-runs when the build definition changes.
+# A BuildKit cache mount on /root/.m2 persists the local Maven repo across builds
+# so neither `dependency:go-offline` nor `package` (which resolves dynamic plugin
+# dependencies on `src/` changes) ever re-downloads artifacts from Maven Central.
 COPY .mvn/ .mvn/
 COPY mvnw pom.xml ./
-RUN chmod +x mvnw && ./mvnw -B dependency:go-offline
+RUN --mount=type=cache,target=/root/.m2 \
+    chmod +x mvnw && ./mvnw -B dependency:go-offline
 
 # Copy sources and build the executable jar. Tests are skipped here; they need a
 # Docker daemon for Testcontainers, so they run in CI rather than in the image build.
 COPY src/ src/
-RUN ./mvnw -B clean package -DskipTests
+RUN --mount=type=cache,target=/root/.m2 \
+    ./mvnw -B package -DskipTests
 
 # ---- Runtime stage --------------------------------------------------------
 # A JRE, not the JDK: this stage only runs `java -jar`, so the compiler and the
