@@ -3,7 +3,20 @@
 A full-stack Spring Boot + React workspace built around the parts that usually get hand-waved: **refresh-token theft detection that can tell an attacker from a second browser tab**, **SMTP OTP email verification & hardened password policy**, **multi-tenant project isolation (`404` across tenants, `403` within a project by role)**, optimistic locking that rejects stale writes instead of silently losing them, paginated task queries, a database schema owned by SQL migrations (`V1`–`V14`) that every test run re-applies against real PostgreSQL, and structured logs where a security event is a queryable object rather than a sentence.
 
 **Java 25 · Spring Boot 4.0.6 · Spring Security 7 · PostgreSQL 18 · Flyway · JPA · Testcontainers · React 18 · Vite · Nginx · Docker**
-— 88 integration tests, all green.
+— 93 integration & unit tests, all green.
+
+---
+
+## Skills & Engineering Gains
+
+This project was built to practice and demonstrate production-grade backend and full-stack engineering patterns rather than CRUD boilerplate:
+
+- **Authentication & Token Security:** Stateless JWT access tokens (`HS256`) paired with rotating `HttpOnly; SameSite=Strict` refresh cookies, atomic SQL row-locking for concurrent-tab vs. token-theft detection, `REQUIRES_NEW` audit/revocation transactions, SMTP 6-digit OTP email verification, and hardened password rules.
+- **Multi-Tenant Isolation & RBAC:** Method-level security beans (`@PreAuthorize` + `ProjectSecurity` / `TaskSecurity`) enforcing strict tenant boundaries (`404 Not Found` to prevent UUID enumeration across tenants, `403 Forbidden` for in-project `MEMBER` vs. `MANAGER` privilege checks) and a sole-manager invariant (`409 Conflict`).
+- **Event-Driven Async Side Effects:** Decoupled email notifications (`@Async` + `@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)`) triggered on task assignment and `MANAGER` promotion so SMTP latency never blocks HTTP transactions or fires on rolled-back writes.
+- **Database Engineering & Concurrency:** Schema-first PostgreSQL 18 migrations owned by Flyway (`V1`–`V14`) with `ddl-auto=validate`, UUIDv7 primary keys, ICU case-insensitive email collations, `JSONB` audit payloads, JPA `@Version` optimistic locking, paginated queries (`Page<TaskResponse>`), and a PostgreSQL advisory-locked (`pg_try_advisory_xact_lock`) nightly sweep for expired refresh tokens and unconsumed OTPs.
+- **Observability & Error Contracts:** RFC 7807 `application/problem+json` error envelopes across both controllers and Spring Security filter-chain handlers, `X-Request-Id` + `userId` MDC correlation, and ECS structured JSON logging.
+- **Full-Stack Containerization & Testing:** Multi-stage Dockerfiles with BuildKit cache mounts (`/root/.m2`, `/root/.npm`), Nginx same-origin reverse-proxying, organized **My Tasks** / **My Projects** React workspace with optimistic 5-second undo deletes, and 93 automated tests backed by real PostgreSQL via Testcontainers.
 
 ---
 
@@ -61,7 +74,7 @@ Compose starts three containers:
 
 ```bash
 createdb task_api
-cp example.env secrets.env      # fill in url/username/password and app.jwt.secret
+cp .env.example secrets.env    # fill in datasource credentials, app.jwt.secret, and SMTP settings
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
@@ -78,7 +91,7 @@ npm run dev                     # http://localhost:5173
 </details>
 
 ```bash
-./mvnw test        # 88 tests; needs only a Docker daemon, no local database or credentials
+./mvnw test        # 93 tests; needs only a Docker daemon, no local database or credentials
 ```
 
 ---
@@ -133,6 +146,7 @@ Every task belongs to a project (`projectId`) and has an optional `assigneeId` (
 
 ### Workspace UX Highlights
 
+- **Organized My Tasks & My Projects Views:** Dedicated **My Tasks** and **My Projects** sections in the navigation rail with a clean, single-CTA header per context.
 - **5-Second Deletion Grace Period with Undo:** Deleting a task or project optimistically removes it from the workspace and shows a 5-second countdown toast (`5s` $\rightarrow$ `1s`) with an **Undo** button and progress bar. Clicking **Undo** cancels the timer and restores the item locally without touching the server; otherwise, `DELETE` fires with the item's `version` when the timer expires.
 - **Sticky In-Place Task Completion & Accidental Click Recovery:** Marking a task as Done while viewing **Open** tasks keeps the task marked in its place so it can be immediately unmarked if clicked by accident; switching or re-opening the **Open** view filters completed tasks out. Rapid toggles on the same task are serialized per task so consecutive `PATCH /api/tasks/{id}/done` calls always pass the freshly bumped `version`.
 - **Profile Sheet & Photo Upload:** Users can open their profile from the account menu to inspect workspace statistics, edit their display name and bio, and upload/change/remove a profile photo (center-cropped and resized to `256×256` client-side).
@@ -145,9 +159,10 @@ Every task belongs to a project (`projectId`) and has an optional `assigneeId` (
   - `V1`–`V5`: `tasks`, `users` (UUIDv7 PK, ICU case-insensitive email), `refresh_tokens`, ownership backfill, and UUIDv7 task PKs.
   - `V6`–`V12`: `projects`, `projects_users` join table with per-project roles (`MANAGER`, `MEMBER`), task-to-project foreign keys, `username` on `users`, and `project_activity_logs` (`JSONB` change payloads).
   - `V13`–`V14`: `email_verification_otps` (`5m` TTL OTP codes) and user profile fields (`avatar_url`, `bio`).
+- **Async email notifications after commit.** [`NotificationEventListener`](src/main/java/com/example/demo/notifications/NotificationEventListener.java) uses `@Async` + `@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)` to email users when assigned a task or promoted to project `MANAGER`, ensuring emails only send for committed transactions and never block API latency.
 - **Hardened password constraints.** `SignupRequest` enforces `8–128` characters with at least one number (`\d`) and one special character (`[^A-Za-z0-9\s]`), mirrored by a live requirement checklist in the signup UI.
 - **Paginated task queries.** `GET /api/tasks` uses Spring Data `Page<TaskResponse>` (`spring.data.web.pageable.serialization-mode=via-dto`, default size `20`, max `100`, ordered by `createdAt DESC`) with an explicit `countQuery`.
-- **Distributed advisory lock on scheduled token sweep.** [`SweepingService`](src/main/java/com/example/demo/auth/service/SweepingService.java) acquires `SELECT pg_try_advisory_xact_lock(424242)` inside its `@Transactional` nightly job so only one replica executes the expired-token purge when scaled horizontally.
+- **Distributed advisory lock on scheduled credential sweep.** [`SweepingService`](src/main/java/com/example/demo/auth/service/SweepingService.java) acquires `SELECT pg_try_advisory_xact_lock(424242)` inside its `@Transactional` nightly job (`03:00` daily) so only one replica purges expired refresh tokens and unconsumed OTPs when scaled horizontally.
 - **Sole-manager invariant.** A project must always have at least one `MANAGER`. Demoting or removing the last manager throws `ProjectConflictException` (`409 Conflict`).
 - **Filter-chain `401` and `403` errors are RFC 7807 `application/problem+json`.** [`SecurityConfig`](src/main/java/com/example/demo/auth/config/SecurityConfig.java) delegates `AuthenticationEntryPoint` and `AccessDeniedHandler` to `HandlerExceptionResolver` so security errors share the exact same RFC 7807 envelope as controller exceptions.
 - **Dev vs. Prod logging hygiene.** SQL parameter bind logging (`org.hibernate.orm.jdbc.bind=TRACE`) and `DEBUG` logging live exclusively in [`application-dev.properties`](src/main/resources/application-dev.properties) so sensitive parameters (such as token or password hashes) are never logged in production.
@@ -159,10 +174,11 @@ Every task belongs to a project (`projectId`) and has an optional `assigneeId` (
 | Suite | Tests | Scope |
 |---|---|---|
 | [`TaskApiTest`](src/test/java/com/example/demo/tasks/TaskApiTest.java) | 32 | HTTP contract via MockMvc — statuses, pagination (`page`, `size`, `totalElements`, `totalPages`), `problem+json`, optimistic locking, and multi-tenant/RBAC boundaries |
+| [`AuthApiTest`](src/test/java/com/example/demo/auth/AuthApiTest.java) | 22 | SMTP OTP send/verify, signup, password complexity validation, login, `GET` & `PUT /auth/me` profile/photo updates, `/auth/logout`, `/auth/logout-all`, duplicate email `409`, nightly OTP sweep |
 | [`TaskRepositoryTest`](src/test/java/com/example/demo/tasks/repository/TaskRepositoryTest.java) | 17 | Repository queries, pagination, and constraints through real committed transactions |
-| [`AuthApiTest`](src/test/java/com/example/demo/auth/AuthApiTest.java) | 21 | SMTP OTP send/verify, signup, password complexity validation, login, `GET` & `PUT /auth/me` profile/photo updates, `/auth/logout`, `/auth/logout-all`, duplicate email `409` |
 | [`RefreshApiTest`](src/test/java/com/example/demo/auth/RefreshApiTest.java) | 10 | Token rotation, two-tab grace window, theft detection, sliding vs. absolute expiry |
-| [`ProjectApiTest`](src/test/java/com/example/demo/project/ProjectApiTest.java) | 6 | Project lifecycle, date validation, `404` non-member isolation, `403` member RBAC, `409` version & sole-manager checks, activity logs |
+| [`ProjectApiTest`](src/test/java/com/example/demo/project/ProjectApiTest.java) | 7 | Project lifecycle, date validation, `404` non-member isolation, `403` member RBAC, `409` version & sole-manager checks, activity logs |
+| [`NotificationEventListenerTest`](src/test/java/com/example/demo/notifications/NotificationEventListenerTest.java) | 3 | Async SMTP notification dispatch on task assignment & project `MANAGER` role |
 | [`SelfInvocationTransactionDemoTest`](src/test/java/com/example/demo/auth/SelfInvocationTransactionDemoTest.java) | 1 | Proves `@Transactional(propagation = REQUIRES_NEW)` is bypassed on self-invocation |
 | [`Demo1ApplicationTests`](src/test/java/com/example/demo/Demo1ApplicationTests.java) | 1 | Context startup + Hibernate schema validation against all 14 Flyway migrations |
 
