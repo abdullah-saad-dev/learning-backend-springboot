@@ -1,0 +1,95 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. CI: Run backend integration tests (Testcontainers) & frontend build
+  # ---------------------------------------------------------------------------
+  test:
+    name: Test Backend & Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Run Maven tests (with Testcontainers)
+        run: chmod +x mvnw && ./mvnw -B test
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install and build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+  # ---------------------------------------------------------------------------
+  # 2. CD: Deploy to production VM via SSH when `main` passes all tests
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy to Production VM
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check if production secrets are configured
+        id: check_secrets
+        env:
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+        run: |
+          if [ -z "$PROD_HOST" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping deployment because PROD_HOST secret is not configured yet."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy via SSH
+        if: steps.check_secrets.outputs.configured == 'true'
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          port: ${{ secrets.PROD_PORT || 22 }}
+          script_stop: true
+          script: |
+            mkdir -p ~/app
+            if [ ! -d ~/app/.git ]; then
+              git clone https://github.com/${{ github.repository }}.git ~/app
+            fi
+            cd ~/app
+            git fetch origin main
+            git reset --hard origin/main
+
+            cat << 'EOF' > secrets.env
+            APP_JWT_SECRET=${{ secrets.APP_JWT_SECRET }}
+            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            SPRING_MAIL_USERNAME=${{ secrets.SPRING_MAIL_USERNAME }}
+            SPRING_MAIL_PASSWORD=${{ secrets.SPRING_MAIL_PASSWORD }}
+            APP_MAIL_FROM=${{ secrets.SPRING_MAIL_USERNAME }}
+            EOF
+            chmod 600 secrets.env
+
+            export POSTGRES_PASSWORD="${{ secrets.POSTGRES_PASSWORD }}"
+            DOCKER_BUILDKIT=1 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build --remove-orphans
+            docker image prune -f

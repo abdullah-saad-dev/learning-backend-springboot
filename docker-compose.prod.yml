@@ -1,0 +1,24 @@
+# Production override:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Hardens the stack for internet-facing deployment:
+# - Exposes ONLY Nginx on port 80 (Postgres and Spring Boot stay private on the Docker network)
+# - Runs Spring Boot with the default (production) profile instead of `dev`
+# - Enables `restart: unless-stopped` on all services
+
+services:
+  postgres:
+    restart: unless-stopped
+    ports: !reset []
+
+  app:
+    restart: unless-stopped
+    mem_limit: 512m
+    environment:
+      SPRING_PROFILES_ACTIVE: default
+    ports: !reset []
+
+  frontend:
+    restart: unless-stopped
+    ports: !reset
+      - "80:80"
