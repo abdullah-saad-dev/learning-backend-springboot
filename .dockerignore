@@ -1,6 +1,5 @@
 target/
 .git/
-.github/
 .idea/
 frontend/
 *.md
